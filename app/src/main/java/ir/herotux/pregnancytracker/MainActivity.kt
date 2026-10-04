@@ -32,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -461,6 +462,10 @@ fun PregnancyApp(){
                         syncStatus=syncStatus,
                         onConnect={authorizeDrive("sync")},
                         onShare={shareDialog=true},
+                        reminderEnabled=reminderEnabled,
+                        onReminder=setWeeklyReminder,
+                        themeMode=themeMode,
+                        onTheme={themeDialog=true},
                         pad=pad
                     )
                 }
