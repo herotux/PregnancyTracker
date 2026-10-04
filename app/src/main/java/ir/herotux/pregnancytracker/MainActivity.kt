@@ -269,6 +269,9 @@ fun PregnancyApp(){
     var examEditor by remember{mutableStateOf<ExamRecord?>(null)}
     var examEditorOpen by remember{mutableStateOf(false)}
     var examDetail by remember{mutableStateOf<ExamRecord?>(null)}
+    var medications by remember{mutableStateOf(emptyList<MedicationRecord>())}
+    var medicationEditor by remember{mutableStateOf<MedicationRecord?>(null)}
+    var medicationEditorOpen by remember{mutableStateOf(false)}
 
     LaunchedEffect(Unit){
         val saved=context.pregnancyStore.data.first()[DueKey]
@@ -279,6 +282,8 @@ fun PregnancyApp(){
         themeMode=context.pregnancyStore.data.first()[ThemeKey] ?: "system"
         reminderEnabled=context.pregnancyStore.data.first()[ReminderKey] ?: false
         exams=loadExamRecords(context.pregnancyStore.data.first()[ExamsKey])
+        medications=loadMedications(context)
+        rescheduleAllMedicationAlarms(context,medications)
         if(reminderEnabled) scheduleWeeklyReminder(context)
         driveEmail=DriveSync.connectedEmail(context)
         if(driveEmail!=null) syncStatus="اتصال به Google Drive فعال است"
@@ -443,7 +448,7 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";else->"خانه"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";else->"خانه"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}},
                         actions={IconButton({screen=4}){Icon(Icons.Default.Settings,null)}},
                         colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
@@ -497,7 +502,34 @@ fun PregnancyApp(){
         if(driveEmail!=null) authorizeDrive("sync")
     },{dateDialog=false})
 
-    selectedWeek?.let{WeekDialogModern(weeklyPlan(it)){selectedWeek=null}}
+    selectedWeek?.let { week ->
+        WeekDialogModern(
+            plan=weeklyPlan(week),
+            medications=medications,
+            onAddMedication={medicationEditor=null;medicationEditorOpen=true},
+            onEditMedication={medicationEditor=it;medicationEditorOpen=true},
+            onClose={selectedWeek=null}
+        )
+    }
+
+    if(medicationEditorOpen) MedicationEditorDialog(
+        initial=medicationEditor,
+        onSave={record ->
+            medications=(medications.filterNot{it.id==record.id}+record).sortedBy{it.name}
+            scope.launch{saveMedications(context,medications)}
+            scheduleMedicationAlarms(context,record)
+            medicationEditorOpen=false
+            medicationEditor=null
+        },
+        onDelete={record ->
+            cancelMedicationAlarms(context,record.id)
+            medications=medications.filterNot{it.id==record.id}
+            scope.launch{saveMedications(context,medications)}
+            medicationEditorOpen=false
+            medicationEditor=null
+        },
+        onCancel={medicationEditorOpen=false;medicationEditor=null}
+    )
 
     if(themeDialog) ThemeChoiceDialog(
         current=themeMode,
@@ -806,12 +838,12 @@ fun CalendarModern(
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
                 Column(Modifier.padding(14.dp)){
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween,modifier=Modifier.fillMaxWidth()){
-                        IconButton(onClick={val p=jalaliPreviousMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronLeft,null)}
+                        IconButton(onClick={val p=jalaliPreviousMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronRight,null)}
                         Column(horizontalAlignment=Alignment.CenterHorizontally){
                             Text(months[displayed.month-1],fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=18.sp)
                             Text(fa(displayed.year),fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick={val p=jalaliNextMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronRight,null)}
+                        IconButton(onClick={val p=jalaliNextMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronLeft,null)}
                     }
                     Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=6.dp)){
                         listOf("ش","ی","د","س","چ","پ","ج").forEach{Box(Modifier.weight(1f),contentAlignment=Alignment.Center){Text(it,fontFamily=Fa,fontSize=11.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
@@ -1122,7 +1154,7 @@ fun WeeksModern(current:Int,pad:PaddingValues,onWeek:(Int)->Unit){
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WeekDialogModern(plan:WeekPlan,onClose:()->Unit){
+fun WeekDialogModern(plan:WeekPlan,medications:List<MedicationRecord>,onAddMedication:()->Unit,onEditMedication:(MedicationRecord)->Unit,onClose:()->Unit){
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
     BasicAlertDialog(onDismissRequest=onClose){
         Surface(shape=RoundedCornerShape(28.dp),color=Color.White,tonalElevation=6.dp,modifier=Modifier.fillMaxWidth()){
@@ -1139,11 +1171,14 @@ fun WeekDialogModern(plan:WeekPlan,onClose:()->Unit){
                     IconButton(onClose){Icon(Icons.Default.Close,null)}
                 }
                 HorizontalDivider(Modifier.padding(vertical=8.dp))
-                LazyColumn(Modifier.heightIn(max=520.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
-                    item{ModernSection("اقدامات",plan.actions,Icons.Default.CheckCircle)}
-                    item{ModernSection("بررسی‌ها و ویزیت",plan.checks,Icons.Default.MedicalServices)}
-                    item{ModernSection("توصیه‌ها",plan.tips,Icons.Default.FavoriteBorder)}
-                    item{ModernSection("علائم هشدار",plan.warnings,Icons.Default.Warning)}
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max=560.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
+                        item{ModernSection("اقدامات",plan.actions,Icons.Default.CheckCircle)}
+                        item{ModernSection("بررسی‌ها و ویزیت",plan.checks,Icons.Default.MedicalServices)}
+                        item{ModernSection("توصیه‌ها",plan.tips,Icons.Default.FavoriteBorder)}
+                        item{MedicationsSection(medications,onAddMedication,onEditMedication)}
+                        item{ModernSection("علائم هشدار",plan.warnings,Icons.Default.Warning)}
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Button(onClick=onClose,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp)){
@@ -1161,13 +1196,13 @@ fun ModernSection(title:String,items:List<String>,icon:androidx.compose.ui.graph
         Row(verticalAlignment=Alignment.CenterVertically){
             Icon(icon,null,tint=RoseDark,modifier=Modifier.size(19.dp))
             Spacer(Modifier.width(7.dp))
-            Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp)
+            Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp,modifier=Modifier.fillMaxWidth(),textAlign=androidx.compose.ui.text.style.TextAlign.Right)
         }
         items.forEach{
-            Row(verticalAlignment=Alignment.Top){
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Top){
                 Text("•",fontFamily=Fa,color=RoseDark,fontWeight=FontWeight.Bold,fontSize=18.sp)
                 Spacer(Modifier.width(7.dp))
-                Text(it,fontFamily=Fa,fontSize=13.sp,lineHeight=21.sp)
+                Text(it,fontFamily=Fa,fontSize=13.sp,lineHeight=21.sp,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Right)
             }
         }
     }
