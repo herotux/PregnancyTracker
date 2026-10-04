@@ -245,8 +245,10 @@ fun PregnancyApp(){
         Identity.getAuthorizationClient(activity).authorize(request)
             .addOnSuccessListener{auth->
                 if(auth.hasResolution()){
-                    auth.pendingIntent?.let{
-                        authLauncher.launch(IntentSenderRequest.Builder(it.intentSender).build())
+                    if(auth.pendingIntent != null){
+                        auth.pendingIntent?.let{
+                            authLauncher.launch(IntentSenderRequest.Builder(it.intentSender).build())
+                        }
                     }else{
                         syncStatus="Google نیاز به تأیید دسترسی دارد"
                     }
@@ -600,6 +602,7 @@ fun WeeksModern(current:Int,pad:PaddingValues,onWeek:(Int)->Unit){
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeekDialogModern(plan:WeekPlan,onClose:()->Unit){
     BasicAlertDialog(onDismissRequest=onClose){
