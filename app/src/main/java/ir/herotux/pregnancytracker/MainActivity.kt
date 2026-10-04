@@ -1,6 +1,7 @@
 package ir.herotux.pregnancytracker
 
 import android.os.Bundle
+import android.content.Context
 import android.app.DatePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,7 +36,7 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 
 private val Fa = FontFamily.SansSerif
-private val android.content.Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
+private val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
 private val DueKey = stringPreferencesKey("due_date")
 
 private val months = listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
