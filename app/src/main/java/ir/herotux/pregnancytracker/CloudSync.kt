@@ -2,10 +2,12 @@ package ir.herotux.pregnancytracker
 
 import android.accounts.Account
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -28,6 +30,12 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
+
+private const val TAG = "PregnancyDriveSync"
+
+class DriveSyncException(val stage: String, val httpCode: Int? = null, message: String, cause: Throwable? = null) : java.io.IOException(message, cause) {
+    fun userMessage(): String = stage + (httpCode?.let { " ($it)" } ?: "") + ": " + message
+}
 
 private val Context.cloudStore by preferencesDataStore(name = "pregnancy_cloud")
 private val CloudFileIdKey = stringPreferencesKey("drive_file_id")
@@ -64,11 +72,7 @@ object DriveSync {
                 CloudPayload(dueDate.toString(), notes.distinct(), localUpdatedAt)
             ).also { id -> context.cloudStore.edit { it[CloudFileIdKey] = id } }
 
-            val remote = runCatching { download(accessToken, fileId) }.getOrNull()
-            if (remote == null) {
-                upload(accessToken, fileId, CloudPayload(dueDate.toString(), notes.distinct(), localUpdatedAt))
-                return@withContext CloudSyncResult(dueDate, notes.distinct(), localUpdatedAt)
-            }
+            val remote = download(accessToken, fileId)
 
             val mergedNotes = (notes + remote.notes).filter { it.isNotBlank() }.distinct()
             val mergedDue = if (remote.updatedAt > localUpdatedAt) LocalDate.parse(remote.dueDate) else dueDate
@@ -80,7 +84,14 @@ object DriveSync {
                 it[CloudNotesKey] = JSONArray(mergedNotes).toString()
                 it[LocalDueKey] = mergedDue.toString()
             }
+            Log.i(TAG, "SYNC_SUCCESS fileId=$fileId")
             CloudSyncResult(mergedDue, mergedNotes, mergedUpdated)
+        } catch (e: DriveSyncException) {
+            Log.e(TAG, "SYNC_FAILED stage=${e.stage} code=${e.httpCode}", e)
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "SYNC_FAILED unexpected", e)
+            throw DriveSyncException("همگام‌سازی", message = e.message ?: "خطای ناشناخته", cause = e)
         }
 
     suspend fun shareWith(context: Context, accessToken: String, email: String) = withContext(Dispatchers.IO) {
@@ -131,6 +142,7 @@ object DriveSync {
         val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         val request = PeriodicWorkRequestBuilder<DriveSyncWorker>(6, TimeUnit.HOURS)
             .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             UNIQUE_WORK,
@@ -189,7 +201,7 @@ object DriveSync {
     private fun request(method: String, url: String, token: String): JSONObject =
         JSONObject(String(requestBytes(method, url, token, null, null), StandardCharsets.UTF_8))
 
-    private fun requestBytes(method: String, url: String, token: String, body: ByteArray?, contentType: String?): ByteArray {
+    private fun requestBytes(method: String, url: String, token: String, body: ByteArray?, contentType: String?, stage: String = "Google Drive"): ByteArray {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 20_000
@@ -207,8 +219,26 @@ object DriveSync {
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val bytes = stream?.readBytes() ?: ByteArray(0)
-            if (code !in 200..299) throw IllegalStateException("Google Drive error $code: " + String(bytes, StandardCharsets.UTF_8))
+            if (code !in 200..299) {
+                val detail = runCatching {
+                    JSONObject(String(bytes, StandardCharsets.UTF_8)).optJSONObject("error")?.optString("message")
+                }.getOrNull()?.takeIf { it.isNotBlank() } ?: String(bytes, StandardCharsets.UTF_8).take(300)
+                val message = when (code) {
+                    401 -> "مجوز Google معتبر نیست؛ دوباره به Google Drive متصل شوید"
+                    403 -> "Google دسترسی این عملیات را رد کرد؛ مجوز Drive یا اشتراک فایل را بررسی کنید"
+                    404 -> "پرونده یا مسیر Google Drive پیدا نشد"
+                    429 -> "تعداد درخواست‌ها زیاد شده؛ کمی بعد دوباره تلاش کنید"
+                    in 500..599 -> "سرویس Google موقتاً خطا دارد؛ دوباره تلاش می‌کنیم"
+                    else -> detail.ifBlank { "خطای Google" }
+                }
+                throw DriveSyncException(stage, code, message)
+            }
+            Log.d(TAG, "HTTP_OK stage=$stage code=$code bytes=${bytes.size}")
             bytes
+        } catch (e: DriveSyncException) {
+            throw e
+        } catch (e: Exception) {
+            throw DriveSyncException(stage, message = "ارتباط با Google قطع شد", cause = e)
         } finally {
             connection.disconnect()
         }
