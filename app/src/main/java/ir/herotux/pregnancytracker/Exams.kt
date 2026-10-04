@@ -358,6 +358,7 @@ fun ExamEditorDialog(
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
     var attachment by remember { mutableStateOf(initial?.attachmentUri) }
     var typeExpanded by remember { mutableStateOf(false) }
+    var datePickerOpen by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
