@@ -229,11 +229,11 @@ fun PregnancyApp(){
                                 applyCloud(resultData)
                             }
                         }.onFailure{
-                            syncStatus="خطا در همگام‌سازی: "+(it.message ?: "خطای ناشناخته")
+                            syncStatus=if(it is DriveSyncException) it.userMessage() else "خطا در همگام‌سازی: "+(it.message ?: "خطای ناشناخته")
                         }
                     }
                 }
-            }.onFailure{syncStatus="دریافت مجوز Google ناموفق بود"}
+            }.onFailure{syncStatus="دریافت مجوز Google ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
         }
     }
 
@@ -270,7 +270,7 @@ fun PregnancyApp(){
                                     syncStatus="همگام‌سازی انجام شد"
                                 }
                             }.onFailure{
-                                syncStatus="خطا: "+(it.message ?: "خطای ناشناخته")
+                                syncStatus=if(it is DriveSyncException) it.userMessage() else "خطا: "+(it.message ?: "خطای ناشناخته")
                             }
                         }
                     }
