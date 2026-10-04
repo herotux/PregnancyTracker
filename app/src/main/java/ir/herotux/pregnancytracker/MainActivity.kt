@@ -184,14 +184,35 @@ fun PregnancyApp(){
 @Composable fun Section(title:String,items:List<String>){Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp);items.forEach{Text("• "+it,fontFamily=Fa)}}}
 @Composable fun Stat(title:String,value:String,modifier:Modifier){Card(modifier,shape=RoundedCornerShape(18.dp)){Column(Modifier.padding(14.dp)){Text(title,fontFamily=Fa,fontSize=13.sp);Text(value,fontFamily=Fa,fontWeight=FontWeight.Bold)}}}
 
-@Composable fun Chart(week:Int){Card(shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Canvas(Modifier.fillMaxWidth().height(160.dp)){
-    val w=size.width; val h=size.height
-    for(i in 0..4){val y=h*i/4;drawLine(MaterialTheme.colorScheme.outlineVariant,Offset(0f,y),Offset(w,y))}
-    var last:Offset?=null
-    for(x in 1..40){val pt=Offset(w*(x-1)/39f,h-h*x/40f);if(last!=null)drawLine(MaterialTheme.colorScheme.primary,last!!,pt,5f,StrokeCap.Round);last=pt}
-    val x=w*(week.coerceIn(1,40)-1)/39f; val y=h-h*week.coerceIn(1,40)/40f
-    drawCircle(MaterialTheme.colorScheme.primary,8f,Offset(x,y))
-};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("هفته ۱",fontFamily=Fa,fontSize=12.sp);Text("هفته ۲۰",fontFamily=Fa,fontSize=12.sp);Text("هفته ۴۰",fontFamily=Fa,fontSize=12.sp)}}}}
+@Composable fun Chart(week:Int){
+    val gridColor=MaterialTheme.colorScheme.outlineVariant
+    val lineColor=MaterialTheme.colorScheme.primary
+    Card(shape=RoundedCornerShape(20.dp)){
+        Column(Modifier.padding(16.dp)){
+            Canvas(Modifier.fillMaxWidth().height(160.dp)){
+                val w=size.width; val h=size.height
+                for(i in 0..4){
+                    val y=h*i/4
+                    drawLine(gridColor,Offset(0f,y),Offset(w,y))
+                }
+                var last:Offset?=null
+                for(x in 1..40){
+                    val pt=Offset(w*(x-1)/39f,h-h*x/40f)
+                    if(last!=null) drawLine(lineColor,last!!,pt,5f,StrokeCap.Round)
+                    last=pt
+                }
+                val x=w*(week.coerceIn(1,40)-1)/39f
+                val y=h-h*week.coerceIn(1,40)/40f
+                drawCircle(lineColor,8f,Offset(x,y))
+            }
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                Text("هفته ۱",fontFamily=Fa,fontSize=12.sp)
+                Text("هفته ۲۰",fontFamily=Fa,fontSize=12.sp)
+                Text("هفته ۴۰",fontFamily=Fa,fontSize=12.sp)
+            }
+        }
+    }
+}
 
 @Composable fun InfoCard(title:String,subtitle:String,body:String){Card(shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(18.dp)){Text(title,fontFamily=Fa,fontSize=18.sp,fontWeight=FontWeight.Bold);if(subtitle.isNotBlank())Text(subtitle,fontFamily=Fa,modifier=Modifier.padding(top=4.dp));Text(body,fontFamily=Fa,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=9.dp))}}}
 
