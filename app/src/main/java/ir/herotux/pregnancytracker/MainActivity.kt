@@ -160,6 +160,7 @@ fun PregnancyApp(){
     selectedWeek?.let{WeekDialog(weeklyPlan(it)){selectedWeek=null}}
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable fun Home(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onWeek:(Int)->Unit){
     val plan=weeklyPlan(age.first.coerceIn(1,40))
     LazyColumn(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(14.dp),contentPadding=PaddingValues(0.dp,14.dp,0.dp,24.dp)){
