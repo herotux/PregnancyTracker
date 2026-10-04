@@ -11,7 +11,6 @@ import android.app.Activity
 import android.content.Context
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import android.app.DatePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -101,6 +100,7 @@ data class Pregnancy(val due:LocalDate){
 }
 
 private val sizes=listOf("دانهٔ خشخاش","دانهٔ کنجد","دانهٔ سیب","عدس","بلوبری","تمشک","انگور","توت‌فرنگی","انجیر","لیمو","هلو","لیموترش","سیب","آووکادو","گلابی","فلفل دلمه‌ای","انبه","موز","هویج","نارگیل کوچک","پاپایا","طالبی کوچک","روتابگا","کدوحلوایی کوچک","گل‌کلم","بادمجان","کدوحلوایی","کلم","نارگیل","آناناس","هندوانه کوچک","طالبی","خربزه","رومین","هندوانه","کدوحلوایی","نوزاد کامل‌قد","نوزاد کامل‌قد","نوزاد کامل‌قد","نوزاد کامل‌قد")
+private val fruitEmojis=listOf("🌱","🌱","🍎","🫘","🫐","🫐","🍇","🍓","🫒","🍋","🍑","🍋","🍎","🥑","🍐","🫑","🥭","🍌","🥕","🥥","🥭","🍈","🥬","🎃","🥦","🍆","🎃","🥬","🥥","🍍","🍉","🍈","🍈","🥬","🍉","🎃","👶","👶","👶","👶")
 
 data class WeekPlan(val week:Int,val title:String,val actions:List<String>,val checks:List<String>,val tips:List<String>,val warnings:List<String>)
 
@@ -443,7 +443,7 @@ fun PregnancyApp(){
                     CenterAlignedTopAppBar(
                         title={Text(when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";else->"خانه"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}},
-                        actions={IconButton({screen=3}){Icon(Icons.Default.Settings,null)}},
+                        actions={IconButton({screen=4}){Icon(Icons.Default.Settings,null)}},
                         colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
                     )
                 },
@@ -613,18 +613,17 @@ fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onW
             SectionHeader("رشد کوچولو", "هفته "+fa(week), Icons.Default.Favorite)
         }
         item{
+            val fruitIndex=(week-1).coerceIn(0,39)
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Sage)){
-                Row(Modifier.fillMaxWidth().padding(20.dp),verticalAlignment=Alignment.CenterVertically){
-                    Surface(shape=RoundedCornerShape(20.dp),color=Color.White,modifier=Modifier.size(68.dp)){
-                        Box(contentAlignment=Alignment.Center){
-                            Icon(Icons.Default.ChildCare,null,tint=Color(0xFF4E8062),modifier=Modifier.size(36.dp))
-                        }
+                Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){
+                    Surface(shape=RoundedCornerShape(20.dp),color=Color.White,modifier=Modifier.size(82.dp)){
+                        Box(contentAlignment=Alignment.Center){Text(fruitEmojis[fruitIndex],fontSize=43.sp)}
                     }
                     Spacer(Modifier.width(14.dp))
-                    Column{
+                    Column(Modifier.weight(1f)){
                         Text("اندازه تقریبی جنین",fontFamily=Fa,fontSize=14.sp,color=Color(0xFF4D6657))
-                        Text(sizes[(week-1).coerceIn(0,39)],fontFamily=Fa,fontSize=21.sp,fontWeight=FontWeight.Bold,color=Color(0xFF31523F))
-                        Text("اطلاعات آموزشی و تقریبی است.",fontFamily=Fa,fontSize=12.sp,color=Color(0xFF587364))
+                        Text(sizes[fruitIndex],fontFamily=Fa,fontSize=21.sp,fontWeight=FontWeight.Bold,color=Color(0xFF31523F))
+                        Text("تصویر تقریبی متناسب با این هفته • اطلاعات آموزشی است.",fontFamily=Fa,fontSize=12.sp,color=Color(0xFF587364),lineHeight=18.sp)
                     }
                 }
             }
@@ -756,10 +755,12 @@ fun ModernProgressChart(week:Int){
                 drawCircle(Color.White,11f,Offset(x,y))
                 drawCircle(line,8f,Offset(x,y))
             }
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-                Text("۱",fontFamily=Fa,fontSize=11.sp)
-                Text("۲۰",fontFamily=Fa,fontSize=11.sp)
-                Text("۴۰",fontFamily=Fa,fontSize=11.sp)
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Ltr){
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                    Text("۱",fontFamily=Fa,fontSize=11.sp)
+                    Text("۲۰",fontFamily=Fa,fontSize=11.sp)
+                    Text("۴۰",fontFamily=Fa,fontSize=11.sp)
+                }
             }
         }
     }
@@ -773,16 +774,17 @@ fun CalendarModern(
     pad:PaddingValues
 ){
     val today=LocalDate.now()
-    val first=month.withDayOfMonth(1)
-    val offset=first.dayOfWeek.value%7
-    val days=month.lengthOfMonth()
+    val displayed=jalaliParts(month)
+    val first=jalaliToGregorian(displayed.year,displayed.month,1)
+    val offset=((first.dayOfWeek.value+1)%7)
+    val maxDay=if(displayed.month<=6)31 else if(displayed.month<=11)30 else if(isJalaliLeap(displayed.year))30 else 29
     val pregnancy=Pregnancy(due)
     val selectedAge=pregnancy.age(selected)
     val inPregnancy=selected>=pregnancy.lmp && selected<=due
     LazyColumn(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=8.dp,bottom=28.dp)){
         item{
             Text("تقویم بارداری",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold)
-            Text("تاریخ شمسی و میلادی، هفته بارداری و موعد زایمان را یکجا ببین.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
+            Text("تقویم کاملاً شمسی؛ تاریخ‌ها، ماه‌ها و انتخاب روز بدون نمایش تاریخ میلادی.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
         }
         item{
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
@@ -792,7 +794,6 @@ fun CalendarModern(
                     Column(Modifier.weight(1f)){
                         Text("موعد تقریبی زایمان",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
                         Text(jalali(due),fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,color=RoseDark)
-                        Text(due.toString(),fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick=onChangeDue){Text("تغییر",fontFamily=Fa)}
                 }
@@ -802,23 +803,23 @@ fun CalendarModern(
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
                 Column(Modifier.padding(14.dp)){
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween,modifier=Modifier.fillMaxWidth()){
-                        IconButton(onClick={onMonth(month.minusMonths(1))}){Icon(Icons.Default.ChevronRight,null)}
+                        IconButton(onClick={val p=jalaliPreviousMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronRight,null)}
                         Column(horizontalAlignment=Alignment.CenterHorizontally){
-                            Text("${fa(month.monthValue)} / ${fa(month.year)}",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp)
-                            Text("ماه میلادی",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(months[displayed.month-1],fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=18.sp)
+                            Text(fa(displayed.year),fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick={onMonth(month.plusMonths(1))}){Icon(Icons.Default.ChevronLeft,null)}
+                        IconButton(onClick={val p=jalaliNextMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronLeft,null)}
                     }
-                    Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=6.dp),horizontalArrangement=Arrangement.SpaceBetween){
+                    Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=6.dp)){
                         listOf("ش","ی","د","س","چ","پ","ج").forEach{Box(Modifier.weight(1f),contentAlignment=Alignment.Center){Text(it,fontFamily=Fa,fontSize=11.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
                     }
-                    val cells=List(offset){null}+List(days){it+1}
-                    cells.chunked(7).forEach{week->
+                    val cells=List(offset){null}+List(maxDay){it+1}
+                    cells.chunked(7).forEach{weekDays->
                         Row(Modifier.fillMaxWidth()){
-                            week.forEach{day->
+                            weekDays.forEach{day->
                                 Box(Modifier.weight(1f).height(58.dp).padding(2.dp),contentAlignment=Alignment.Center){
                                     if(day!=null){
-                                        val date=month.withDayOfMonth(day)
+                                        val date=jalaliToGregorian(displayed.year,displayed.month,day)
                                         val isSelected=date==selected
                                         val isToday=date==today
                                         val isDue=date==due
@@ -826,14 +827,13 @@ fun CalendarModern(
                                         Surface(Modifier.fillMaxSize().clickable{onSelected(date)},shape=RoundedCornerShape(12.dp),color=when{isDue->Rose;isSelected->Blush;active->MaterialTheme.colorScheme.surfaceVariant;else->Color.Transparent}){
                                             Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
                                                 Text(fa(day),fontFamily=Fa,fontSize=15.sp,fontWeight=if(isToday||isSelected||isDue)FontWeight.Bold else FontWeight.Normal,color=if(isDue)Color.White else MaterialTheme.colorScheme.onSurface)
-                                                Text(jalali(date).split(" ").first(),fontFamily=Fa,fontSize=9.sp,color=if(isDue)Color.White else RoseDark)
                                                 if(isToday) Text("امروز",fontFamily=Fa,fontSize=7.sp,color=if(isDue)Color.White else RoseDark)
                                             }
                                         }
                                     }
                                 }
                             }
-                            repeat(7-week.size){Box(Modifier.weight(1f).height(58.dp))}
+                            repeat(7-weekDays.size){Box(Modifier.weight(1f).height(58.dp))}
                         }
                     }
                 }
@@ -844,13 +844,12 @@ fun CalendarModern(
                 Column(Modifier.padding(17.dp)){
                     Text("تاریخ انتخاب‌شده",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
                     Text(jalali(selected),fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=20.sp,color=RoseDark,modifier=Modifier.padding(top=5.dp))
-                    Text(selected.toString(),fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     if(inPregnancy){
                         Text("هفته ${fa(selectedAge.first)}، روز ${fa(selectedAge.second)} بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
                         Text(if(selected==due)"این تاریخ، موعد تقریبی زایمان است." else if(selected<today)"این تاریخ در گذشته است." else "این تاریخ در بازه بارداری قرار دارد.",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=3.dp))
                     }else{
-                        Text(if(selected<pregnancy.lmp)"این تاریخ پیش از شروع محاسبات بارداری است." else "این تاریخ بعد از موعد تقریبی زایمان است.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if(selected<pregnancy.lmp)"این تاریخ پیش از شروع محاسبات بارداری است." else "این تاریخ بعد از موعد تقریبی زایمان است.",fontFamily=Fa,fontSize=13.sp)
                     }
                 }
             }
@@ -1032,7 +1031,7 @@ fun SettingsModern(
             Text("اطلاعات بارداری، همگام‌سازی و ظاهر برنامه را مدیریت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
         }
         item{SettingTile(Icons.Default.Event,"تاریخ زایمان","تاریخ فعلی: "+jalali(due)){onDue(due)}}
-        item{SettingTile(Icons.Default.Language,"تقویم","نمایش همزمان تاریخ شمسی و میلادی"){}}
+        item{SettingTile(Icons.Default.Language,"تقویم","تقویم و تاریخ‌ها به‌صورت شمسی"){}}
         item{
             SettingTile(
                 Icons.Default.CloudSync,
@@ -1156,23 +1155,5 @@ fun SettingTile(icon:androidx.compose.ui.graphics.vector.ImageVector,title:Strin
 
 @Composable
 fun DateDialogModern(current:LocalDate,onOk:(LocalDate)->Unit,onCancel:()->Unit){
-    val context=androidx.compose.ui.platform.LocalContext.current
-    AlertDialog(
-        onDismissRequest=onCancel,
-        icon={Icon(Icons.Default.Event,null,tint=RoseDark)},
-        title={Text("تاریخ زایمان",fontFamily=Fa,fontWeight=FontWeight.Bold)},
-        text={
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                Text("تاریخ فعلی",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(jalali(current),fontFamily=Fa,fontSize=21.sp,fontWeight=FontWeight.Bold)
-                Text("تاریخ میلادی را انتخاب کنید؛ تاریخ شمسی و هفته بارداری خودکار محاسبه می‌شوند.",fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)
-            }
-        },
-        confirmButton={
-            TextButton(onClick={
-                DatePickerDialog(context,{_,y,m,d->onOk(LocalDate.of(y,m+1,d))},current.year,current.monthValue-1,current.dayOfMonth).show()
-            }){Text("انتخاب تاریخ",fontFamily=Fa)}
-        },
-        dismissButton={TextButton(onCancel){Text("لغو",fontFamily=Fa)}}
-    )
+    PersianDatePickerDialog(initialDate=current,onSelect=onOk,onDismiss=onCancel)
 }
