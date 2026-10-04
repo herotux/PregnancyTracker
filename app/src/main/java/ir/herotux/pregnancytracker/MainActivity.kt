@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.app.DatePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -260,7 +261,7 @@ fun PregnancyApp(){
                                     DriveSync.shareWith(context,token,partnerEmail)
                                     syncStatus="پرونده برای $partnerEmail به اشتراک گذاشته شد"
                                 }else{
-                                    val email=driveEmail ?: auth.toGoogleSignInAccount()?.email ?: "Google"
+                                    val email=driveEmail ?: DriveSync.accountEmail(token) ?: "Google"
                                     val resultData=DriveSync.connectAndSync(context,email,token,due,notes,localUpdatedAt)
                                     driveEmail=email
                                     applyCloud(resultData)
