@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -132,7 +133,8 @@ fun PregnancyApp(){
     var screen by remember{mutableIntStateOf(0)}
     var note by remember{mutableStateOf("")}
     var notes by remember{mutableStateOf(emptyList<String>())}
-    var dateDialog by remember{mutableStateOf(false)}\n    var selectedWeek by remember{mutableStateOf<Int?>(null)}
+    var dateDialog by remember{mutableStateOf(false)}
+    var selectedWeek by remember{mutableStateOf<Int?>(null)}
     val p=Pregnancy(due); val now=LocalDate.now(); val age=p.age(now)
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF8B4667),secondary=Color(0xFF765467))){
         CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl){
@@ -154,7 +156,8 @@ fun PregnancyApp(){
             }
         }
     }
-    if(dateDialog) DateDialog(due,{due=it;dateDialog=false},{dateDialog=false})\n    selectedWeek?.let{WeekDialog(weeklyPlan(it)){selectedWeek=null}}
+    if(dateDialog) DateDialog(due,{due=it;dateDialog=false},{dateDialog=false})
+    selectedWeek?.let{WeekDialog(weeklyPlan(it)){selectedWeek=null}}
 }
 
 @Composable fun Home(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onWeek:(Int)->Unit){
@@ -214,4 +217,5 @@ fun PregnancyApp(){
     item{Text("رابط کاربری کاملاً راست‌به‌چپ است و برنامه برای کار بدون اینترنت طراحی شده است. تاریخ شمسی و میلادی همزمان نمایش داده می‌شوند.",fontFamily=Fa,color=MaterialTheme.colorScheme.onSurfaceVariant)}
 }}
 
-@Composable fun DateDialog(current:LocalDate,onOk:(LocalDate)->Unit,onCancel:()->Unit){AlertDialog(onDismissRequest=onCancel,title={Text("تاریخ زایمان",fontFamily=Fa)},text={Text("تاریخ فعلی: ${jalali(current)}\nنسخه اول با تاریخ نمونهٔ ۴ فوریهٔ ۲۰۲۷ شروع می‌شود.",fontFamily=Fa)},confirmButton={TextButton({onOk(current)}){Text("تأیید",fontFamily=Fa)}},dismissButton={TextButton(onCancel){Text("لغو",fontFamily=Fa)}})}
+@Composable fun DateDialog(current:LocalDate,onOk:(LocalDate)->Unit,onCancel:()->Unit){AlertDialog(onDismissRequest=onCancel,title={Text("تاریخ زایمان",fontFamily=Fa)},text={Text("تاریخ فعلی: ${jalali(current)}
+نسخه اول با تاریخ نمونهٔ ۴ فوریهٔ ۲۰۲۷ شروع می‌شود.",fontFamily=Fa)},confirmButton={TextButton({onOk(current)}){Text("تأیید",fontFamily=Fa)}},dismissButton={TextButton(onCancel){Text("لغو",fontFamily=Fa)}})}
