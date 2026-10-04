@@ -221,7 +221,7 @@ fun PregnancyApp(){
                                 DriveSync.shareWith(context,token,partnerEmail)
                                 syncStatus="پرونده برای $partnerEmail به اشتراک گذاشته شد"
                             }else{
-                                val email=driveEmail ?: auth.toGoogleSignInAccount()?.email ?: "Google"
+                                val email=driveEmail ?: DriveSync.accountEmail(token) ?: "Google"
                                 val resultData=DriveSync.connectAndSync(context,email,token,due,notes,localUpdatedAt)
                                 driveEmail=email
                                 syncStatus="آخرین همگام‌سازی: همین الان"
@@ -239,7 +239,7 @@ fun PregnancyApp(){
     fun authorizeDrive(action:String){
         pendingAction=action
         val request=AuthorizationRequest.builder()
-            .setRequestedScopes(listOf(Scope(DriveSync.DRIVE_SCOPE)))
+            .setRequestedScopes(listOf(Scope(DriveSync.DRIVE_SCOPE),Scope(DriveSync.EMAIL_SCOPE)))
             .build()
         Identity.getAuthorizationClient(activity).authorize(request)
             .addOnSuccessListener{auth->
