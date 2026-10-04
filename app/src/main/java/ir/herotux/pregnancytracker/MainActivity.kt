@@ -442,7 +442,7 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";else->"خانه"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";else->"خانه"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}},
                         actions={IconButton({screen=4}){Icon(Icons.Default.Settings,null)}},
                         colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
@@ -450,7 +450,7 @@ fun PregnancyApp(){
                 },
                 bottomBar={
                     NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=3.dp){
-                        listOf("خانه" to Icons.Default.Home,"هفته‌ها" to Icons.Default.CalendarMonth,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings)
+                        listOf("خانه" to Icons.Default.Home,"هفته جاری" to Icons.Default.Today,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings)
                             .forEachIndexed{i,(label,icon)->
                                 NavigationBarItem(selected=screen==i,onClick={screen=i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
                             }
@@ -459,7 +459,7 @@ fun PregnancyApp(){
             ){pad->
                 when(screen){
                     0->HomeModern(p,age,now,pad,{selectedWeek=it},{screen=5})
-                    1->WeeksModern(age.first,pad){selectedWeek=it}
+                    1->CurrentWeekModern(age.first,age.second,now,p,pad,{selectedWeek=it},{screen=6})
                     2->NotesModern(notes,note,{note=it},{
                         if(note.isNotBlank()){
                             notes=notes+note
@@ -483,6 +483,7 @@ fun PregnancyApp(){
                         pad=pad
                     )
                     5->ExamsModern(records=exams,pregnancy=p,onAdd={examEditor=null;examEditorOpen=true},onEdit={examEditor=it;examEditorOpen=true},onDelete={record->exams=exams.filterNot{it.id==record.id};saveExams();examEditorOpen=false},onOpen={examDetail=it},pad=pad)
+                    6->WeeksModern(age.first,pad){selectedWeek=it}
                 }
             }
         }
@@ -804,12 +805,12 @@ fun CalendarModern(
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
                 Column(Modifier.padding(14.dp)){
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween,modifier=Modifier.fillMaxWidth()){
-                        IconButton(onClick={val p=jalaliPreviousMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronRight,null)}
+                        IconButton(onClick={val p=jalaliPreviousMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronLeft,null)}
                         Column(horizontalAlignment=Alignment.CenterHorizontally){
                             Text(months[displayed.month-1],fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=18.sp)
                             Text(fa(displayed.year),fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick={val p=jalaliNextMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronLeft,null)}
+                        IconButton(onClick={val p=jalaliNextMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronRight,null)}
                     }
                     Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=6.dp)){
                         listOf("ش","ی","د","س","چ","پ","ج").forEach{Box(Modifier.weight(1f),contentAlignment=Alignment.Center){Text(it,fontFamily=Fa,fontSize=11.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
@@ -858,6 +859,230 @@ fun CalendarModern(
     }
 }
 
+
+@Composable
+fun CurrentWeekModern(
+    week: Int,
+    dayInWeek: Int,
+    today: LocalDate,
+    pregnancy: Pregnancy,
+    pad: PaddingValues,
+    onOpenWeek: (Int) -> Unit,
+    onAllWeeks: () -> Unit
+) {
+    val safeWeek = week.coerceIn(1, 40)
+    val safeDay = dayInWeek.coerceIn(0, 6)
+    val plan = weeklyPlan(safeWeek)
+    val fruitIndex = (safeWeek - 1).coerceIn(0, 39)
+    val daily = when (safeDay) {
+        0 -> listOf(
+            "صبحانه متعادل با یک منبع پروتئین و یک میوه انتخاب کن.",
+            "در طول روز آب را منظم و متناسب با شرایط بدنی مصرف کن.",
+            "دارو و مکمل‌ها را فقط طبق برنامه پزشک مصرف کن."
+        )
+        1 -> listOf(
+            "امروز سبزیجات و میوه‌های متنوع را در وعده‌هایت قرار بده.",
+            "برای فیبر کافی، غلات کامل، حبوبات و سبزیجات را در حد تحملت انتخاب کن.",
+            "اگر تهوع یا سوزش معده داری، وعده‌های کوچک‌تر می‌تواند کمک‌کننده باشد."
+        )
+        2 -> listOf(
+            "یک منبع کلسیم مناسب مانند لبنیات پاستوریزه یا جایگزین غنی‌شده مصرف کن.",
+            "پروتئین را در چند وعده کوچک پخش کن.",
+            "نوشیدنی‌های بسیار شیرین را کمتر و آب را بیشتر انتخاب کن."
+        )
+        3 -> listOf(
+            "غذاهای حاوی آهن را در برنامه امروز قرار بده.",
+            "همراه منابع گیاهی آهن، یک منبع ویتامین C مثل مرکبات یا فلفل دلمه‌ای انتخاب کن.",
+            "مکمل آهن را فقط طبق دستور پزشک مصرف کن."
+        )
+        4 -> listOf(
+            "در صورت توصیه پزشک، منابع امگا-۳ و ماهی کم‌جیوه را در برنامه غذایی قرار بده.",
+            "غذاهای خام یا نیم‌پز و لبنیات غیرپاستوریزه را مصرف نکن.",
+            "یک میان‌وعده ساده و مغذی برای جلوگیری از گرسنگی شدید آماده کن."
+        )
+        5 -> listOf(
+            "امروز یک وعده متعادل شامل پروتئین، سبزیجات و غلات کامل داشته باش.",
+            "آب کافی و استراحت منظم را در برنامه روز قرار بده.",
+            "اگر غذای خاصی با علائم بدنی‌ات سازگار نیست، آن را با پزشک یا ماما مطرح کن."
+        )
+        else -> listOf(
+            "وعده‌های هفته آینده را از قبل برنامه‌ریزی کن تا انتخاب‌های سالم ساده‌تر شود.",
+            "میوه و سبزی تازه و خوراکی‌های مناسب بارداری را برای روزهای آینده آماده کن.",
+            "فهرست سؤال‌ها و علائم این هفته را برای ویزیت بعدی مرور کن."
+        )
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp)
+    ) {
+        item {
+            Text("هفته جاری", fontFamily = Fa, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "برنامه امروز و خلاصه کامل هفته ${fa(safeWeek)}",
+                fontFamily = Fa, fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+        item {
+            Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = RoseDark)) {
+                Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f), modifier = Modifier.size(64.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(${fa(safeWeek)}, fontFamily = Fa, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(plan.title, fontFamily = Fa, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            "امروز: ${jalali(today)}",
+                            fontFamily = Fa, fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.padding(top = 3.dp)
+                        )
+                    }
+                }
+            }
+        }
+        item { SectionHeader("امروز", "روز ${fa(safeDay + 1)} از هفته جاری", Icons.Default.Today) }
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Blush)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.EventAvailable, null, tint = RoseDark)
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text("تاریخ امروز", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(jalali(today), fontFamily = Fa, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = RoseDark)
+                        }
+                    }
+                    HorizontalDivider()
+                    Text(
+                        "هفته ${fa(safeWeek)}، روز ${fa(safeDay + 1)} بارداری",
+                        fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 14.sp
+                    )
+                    Text(
+                        "موعد تقریبی زایمان: ${jalali(pregnancy.due)}",
+                        fontFamily = Fa, fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        item { SectionHeader("توصیه‌های امروز", "تغذیه و مراقبت روزانه", Icons.Default.Restaurant) }
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    daily.forEach { tip ->
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Default.CheckCircleOutline, null, tint = RoseDark, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(tip, fontFamily = Fa, fontSize = 13.sp, lineHeight = 21.sp)
+                        }
+                    }
+                }
+            }
+        }
+        item { SectionHeader("پیشرفت همین هفته", "روزهای هفته جاری", Icons.Default.Timeline) }
+        item { WeeklyFocusChart(safeDay) }
+        item { SectionHeader("جایگاه در بارداری", "هفته ${fa(safeWeek)} از ۴۰ هفته", Icons.Default.PieChart) }
+        item { ModernProgressChart(safeWeek) }
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("مهم‌ترین برنامه این هفته", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(plan.actions.first(), fontFamily = Fa, fontSize = 13.sp, lineHeight = 21.sp)
+                    Text("بررسی‌ها", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = RoseDark)
+                    plan.checks.take(3).forEach { Text("• $it", fontFamily = Fa, fontSize = 13.sp, lineHeight = 21.sp) }
+                }
+            }
+        }
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Sage)) {
+                Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(18.dp), color = Color.White, modifier = Modifier.size(70.dp)) {
+                        Box(contentAlignment = Alignment.Center) { Text(fruitEmojis[fruitIndex], fontSize = 38.sp) }
+                    }
+                    Spacer(Modifier.width(13.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("رشد این هفته", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF31523F))
+                        Text(sizes[fruitIndex], fontFamily = Fa, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF31523F))
+                        Text("اندازه تقریبی و آموزشی؛ رشد واقعی با نظر پزشک و سونوگرافی ارزیابی می‌شود.", fontFamily = Fa, fontSize = 11.sp, lineHeight = 18.sp, color = Color(0xFF587364))
+                    }
+                }
+            }
+        }
+        item { SectionHeader("علائم هشدار", "در صورت بروز جدی بگیرید", Icons.Default.Warning) }
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0F1))) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    plan.warnings.take(3).forEach {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFB04455), modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(it, fontFamily = Fa, fontSize = 12.sp, lineHeight = 20.sp, color = Color(0xFF71313B))
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            OutlinedButton(onClick = { onOpenWeek(safeWeek) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
+                Icon(Icons.Default.AutoAwesome, null)
+                Spacer(Modifier.width(7.dp))
+                Text("جزئیات کامل هفته ${fa(safeWeek)}", fontFamily = Fa)
+            }
+        }
+        item {
+            TextButton(onClick = onAllWeeks, modifier = Modifier.fillMaxWidth()) {
+                Text("مشاهده همه ۴۰ هفته", fontFamily = Fa, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyFocusChart(dayInWeek: Int) {
+    val day = dayInWeek.coerceIn(0, 6)
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.padding(17.dp)) {
+            Text("پیشرفت ۷ روز هفته", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("روز ${fa(day + 1)} از ۷", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 3.dp))
+            Spacer(Modifier.height(12.dp))
+            Canvas(Modifier.fillMaxWidth().height(120.dp)) {
+                val w = size.width
+                val h = size.height
+                val line = RoseDark
+                for (i in 0..4) {
+                    val y = h * i / 4
+                    drawLine(Color(0xFFE9DDE1), Offset(0f, y), Offset(w, y), 1f)
+                }
+                var last: Offset? = null
+                for (x in 0..6) {
+                    val progress = (x + 1) / 7f
+                    val pt = Offset(w * x / 6f, h - h * progress)
+                    if (last != null) drawLine(line, last!!, pt, 5f, StrokeCap.Round)
+                    last = pt
+                }
+                val x = w * day / 6f
+                val y = h - h * ((day + 1) / 7f)
+                drawCircle(Color.White, 10f, Offset(x, y))
+                drawCircle(line, 7f, Offset(x, y))
+            }
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("۱", fontFamily = Fa, fontSize = 10.sp)
+                    Text("۴", fontFamily = Fa, fontSize = 10.sp)
+                    Text("۷", fontFamily = Fa, fontSize = 10.sp)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun WeeksModern(current:Int,pad:PaddingValues,onWeek:(Int)->Unit){
     val trimesterColors=listOf(Blush,Color(0xFFE9F0FF),Sage)
@@ -897,6 +1122,7 @@ fun WeeksModern(current:Int,pad:PaddingValues,onWeek:(Int)->Unit){
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeekDialogModern(plan:WeekPlan,onClose:()->Unit){
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
     BasicAlertDialog(onDismissRequest=onClose){
         Surface(shape=RoundedCornerShape(28.dp),color=Color.White,tonalElevation=6.dp,modifier=Modifier.fillMaxWidth()){
             Column(Modifier.padding(20.dp)){
@@ -924,6 +1150,7 @@ fun WeekDialogModern(plan:WeekPlan,onClose:()->Unit){
                 }
             }
         }
+    }
     }
 }
 
