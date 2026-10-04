@@ -1,6 +1,5 @@
 package ir.herotux.pregnancytracker
 
-import android.app.DatePickerDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -23,6 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.json.JSONArray
@@ -369,6 +371,15 @@ fun ExamEditorDialog(
         }
     }
 
+    if (datePickerOpen) {
+        PersianDatePickerDialog(
+            initialDate = date,
+            onSelect = { date = it; datePickerOpen = false },
+            onDismiss = { datePickerOpen = false }
+        )
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
     Dialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -432,13 +443,7 @@ fun ExamEditorDialog(
                         }
                     }
                     OutlinedButton(
-                        onClick = {
-                            DatePickerDialog(
-                                context,
-                                { _, y, m, d -> date = LocalDate.of(y, m + 1, d) },
-                                date.year, date.monthValue - 1, date.dayOfMonth
-                            ).show()
-                        },
+                        onClick = { datePickerOpen = true },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(15.dp),
                         contentPadding = PaddingValues(vertical = 13.dp)
@@ -448,7 +453,7 @@ fun ExamEditorDialog(
                         Column(horizontalAlignment = Alignment.Start) {
                             Text("تاریخ گزارش", fontFamily = Fa, fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(jalali(date) + "  •  " + date, fontFamily = Fa, fontSize = 13.sp)
+                            Text(jalali(date), fontFamily = Fa, fontSize = 13.sp)
                         }
                     }
 
@@ -516,6 +521,7 @@ fun ExamEditorDialog(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -523,6 +529,7 @@ fun ExamDetailDialog(
     record: ExamRecord, pregnancy: Pregnancy, onEdit: () -> Unit, onClose: () -> Unit
 ) {
     val age = pregnancy.age(record.date)
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp),
@@ -606,6 +613,223 @@ fun ExamDetailDialog(
             }
         }
     }
+    }
+}
+
+
+@Composable
+private fun PersianDatePickerDialog(
+    initialDate: LocalDate,
+    onSelect: (LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var displayed by remember(initialDate) { mutableStateOf(jalaliParts(initialDate)) }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp
+            ) {
+                Column(Modifier.padding(18.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Blush,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.CalendarMonth, null, tint = RoseDark)
+                            }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("انتخاب تاریخ", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                            Text("تقویم شمسی", fontFamily = Fa, fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, "بستن")
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            displayed = jalaliPreviousMonth(displayed)
+                        }) {
+                            Icon(Icons.Default.ChevronRight, "ماه قبل")
+                        }
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                months[displayed.month - 1],
+                                fontFamily = Fa, fontSize = 18.sp, fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                fa(displayed.year),
+                                fontFamily = Fa, fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = {
+                            displayed = jalaliNextMonth(displayed)
+                        }) {
+                            Icon(Icons.Default.ChevronLeft, "ماه بعد")
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(Modifier.fillMaxWidth()) {
+                        listOf("ش", "ی", "د", "س", "چ", "پ", "ج").forEach {
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                Text(it, fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(5.dp))
+
+                    val first = jalaliToGregorian(displayed.year, displayed.month, 1)
+                    val offset = ((first.dayOfWeek.value + 1) % 7)
+                    val maxDay = if (displayed.month <= 6) 31 else if (displayed.month <= 11) 30 else if (isJalaliLeap(displayed.year)) 30 else 29
+                    val cells = offset + maxDay
+
+                    for (row in 0 until ((cells + 6) / 7)) {
+                        Row(Modifier.fillMaxWidth()) {
+                            for (col in 0..6) {
+                                val index = row * 7 + col
+                                if (index < offset || index >= offset + maxDay) {
+                                    Box(Modifier.weight(1f).height(42.dp))
+                                } else {
+                                    val day = index - offset + 1
+                                    val cellDate = jalaliToGregorian(displayed.year, displayed.month, day)
+                                    val selected = cellDate == initialDate
+                                    Box(
+                                        Modifier.weight(1f).height(42.dp).padding(2.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { onSelect(cellDate) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = if (selected) RoseDark else androidx.compose.ui.graphics.Color.Transparent,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    fa(day),
+                                                    fontFamily = Fa,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (selected) androidx.compose.ui.graphics.Color.White
+                                                    else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        jalali(initialDate),
+                        fontFamily = Fa, fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class JalaliParts(val year: Int, val month: Int, val day: Int)
+
+private fun jalaliParts(g: LocalDate): JalaliParts {
+    val md = intArrayOf(0,31,59,90,120,151,181,212,243,273,304,334)
+    val gy = g.year - 1600
+    val gm = g.monthValue - 1
+    val gd = g.dayOfMonth - 1
+    var days = 365 * gy + (gy + 3) / 4 - (gy + 99) / 100 + (gy + 399) / 400 + gd + md[gm]
+    if (gm > 1 && ((g.year % 4 == 0 && g.year % 100 != 0) || g.year % 400 == 0)) days++
+    var j = days - 79
+    val n = j / 12053
+    j %= 12053
+    var jy = 979 + 33 * n + 4 * (j / 1461)
+    j %= 1461
+    if (j >= 366) {
+        jy += (j - 1) / 365
+        j = (j - 1) % 365
+    }
+    val jm = if (j < 186) 1 + j / 31 else 7 + (j - 186) / 30
+    val jd = 1 + if (j < 186) j % 31 else (j - 186) % 30
+    return JalaliParts(jy, jm, jd)
+}
+
+private fun jalaliToGregorian(jy: Int, jm: Int, jd: Int): LocalDate {
+    var jy0 = jy - 979
+    var days = 365 * jy0 + (jy0 / 33) * 8 + ((jy0 % 33) + 3) / 4
+    days += if (jm <= 6) (jm - 1) * 31 else 186 + (jm - 7) * 30
+    days += jd - 1
+    val gDays = days + 79
+    var gy = 1600 + 400 * (gDays / 146097)
+    var rem = gDays % 146097
+    var leap = true
+    if (rem >= 36525) {
+        rem--
+        gy += 100 * (rem / 36524)
+        rem %= 36524
+        if (rem >= 365) rem++
+        else leap = false
+    }
+    gy += 4 * (rem / 1461)
+    rem %= 1461
+    if (rem >= 366) {
+        leap = false
+        rem--
+        gy += rem / 365
+        rem %= 365
+    }
+    val gd = rem + 1
+    val monthLengths = intArrayOf(
+        31, if (leap) 29 else 28, 31, 30, 31, 30,
+        31, 31, 30, 31, 30, 31
+    )
+    var gm = 1
+    var day = gd
+    while (day > monthLengths[gm - 1]) {
+        day -= monthLengths[gm - 1]
+        gm++
+    }
+    return LocalDate.of(gy, gm, day)
+}
+
+private fun isJalaliLeap(year: Int): Boolean =
+    jalaliToGregorian(year + 1, 1, 1).minusDays(1).let { jalaliParts(it).year == year && jalaliParts(it).month == 12 && jalaliParts(it).day == 30 }
+
+private fun jalaliPreviousMonth(p: JalaliParts): JalaliParts =
+    if (p.month == 1) JalaliParts(p.year - 1, 12, minOf(p.day, if (isJalaliLeap(p.year - 1)) 30 else 29))
+    else JalaliParts(p.year, p.month - 1, minOf(p.day, if (p.month - 1 <= 6) 31 else 30))
+
+private fun jalaliNextMonth(p: JalaliParts): JalaliParts {
+    val year = if (p.month == 12) p.year + 1 else p.year
+    val month = if (p.month == 12) 1 else p.month + 1
+    val max = if (month <= 6) 31 else if (month <= 11) 30 else if (isJalaliLeap(year)) 30 else 29
+    return JalaliParts(year, month, minOf(p.day, max))
 }
 
 @Composable
