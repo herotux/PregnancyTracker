@@ -757,9 +757,9 @@ fun PersianDatePickerDialog(
     }
 }
 
-private data class JalaliParts(val year: Int, val month: Int, val day: Int)
+data class JalaliParts(val year: Int, val month: Int, val day: Int)
 
-private fun jalaliParts(g: LocalDate): JalaliParts {
+fun jalaliParts(g: LocalDate): JalaliParts {
     val md = intArrayOf(0,31,59,90,120,151,181,212,243,273,304,334)
     val gy = g.year - 1600
     val gm = g.monthValue - 1
@@ -780,7 +780,7 @@ private fun jalaliParts(g: LocalDate): JalaliParts {
     return JalaliParts(jy, jm, jd)
 }
 
-private fun jalaliToGregorian(jy: Int, jm: Int, jd: Int): LocalDate {
+fun jalaliToGregorian(jy: Int, jm: Int, jd: Int): LocalDate {
     var jy0 = jy - 979
     var days = 365 * jy0 + (jy0 / 33) * 8 + ((jy0 % 33) + 3) / 4
     days += if (jm <= 6) (jm - 1) * 31 else 186 + (jm - 7) * 30
@@ -818,14 +818,14 @@ private fun jalaliToGregorian(jy: Int, jm: Int, jd: Int): LocalDate {
     return LocalDate.of(gy, gm, day)
 }
 
-private fun isJalaliLeap(year: Int): Boolean =
+fun isJalaliLeap(year: Int): Boolean =
     jalaliToGregorian(year + 1, 1, 1).minusDays(1).let { jalaliParts(it).year == year && jalaliParts(it).month == 12 && jalaliParts(it).day == 30 }
 
-private fun jalaliPreviousMonth(p: JalaliParts): JalaliParts =
+fun jalaliPreviousMonth(p: JalaliParts): JalaliParts =
     if (p.month == 1) JalaliParts(p.year - 1, 12, minOf(p.day, if (isJalaliLeap(p.year - 1)) 30 else 29))
     else JalaliParts(p.year, p.month - 1, minOf(p.day, if (p.month - 1 <= 6) 31 else 30))
 
-private fun jalaliNextMonth(p: JalaliParts): JalaliParts {
+fun jalaliNextMonth(p: JalaliParts): JalaliParts {
     val year = if (p.month == 12) p.year + 1 else p.year
     val month = if (p.month == 12) 1 else p.month + 1
     val max = if (month <= 6) 31 else if (month <= 11) 30 else if (isJalaliLeap(year)) 30 else 29
