@@ -1,13 +1,16 @@
-
 package ir.herotux.pregnancytracker
 
 import android.app.DatePickerDialog
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,9 +18,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -33,6 +39,7 @@ data class ExamRecord(
 )
 
 private val examTypes = listOf("سونوگرافی", "آزمایش خون", "آزمایش ادرار", "غربالگری", "آنومالی", "سایر")
+private val examFilters = listOf("همه", "سونوگرافی", "آزمایش", "غربالگری", "آنومالی")
 
 private fun ExamRecord.toJson() = JSONObject().apply {
     put("id", id); put("date", date.toString()); put("type", type)
@@ -62,6 +69,18 @@ internal fun loadExamRecords(raw: String?): List<ExamRecord> {
 internal fun encodeExamRecords(items: List<ExamRecord>): String =
     JSONArray().apply { items.forEach { put(it.toJson()) } }.toString()
 
+private fun examIcon(type: String) = when (type) {
+    "سونوگرافی", "آنومالی" -> Icons.Default.ImageSearch
+    "آزمایش خون", "آزمایش ادرار" -> Icons.Default.Science
+    "غربالگری" -> Icons.Default.FactCheck
+    else -> Icons.Default.Assignment
+}
+
+private fun examTypeShort(type: String) = when (type) {
+    "آزمایش خون", "آزمایش ادرار" -> "آزمایش"
+    else -> type
+}
+
 @Composable
 fun ExamsModern(
     records: List<ExamRecord>, pregnancy: Pregnancy,
@@ -70,69 +89,254 @@ fun ExamsModern(
     pad: PaddingValues
 ) {
     var filter by remember { mutableStateOf("همه") }
-    val filters = listOf("همه", "سونوگرافی", "آزمایش", "غربالگری")
-    val shown = records.filter {
-        filter == "همه" ||
-        (filter == "آزمایش" && (it.type == "آزمایش خون" || it.type == "آزمایش ادرار")) ||
-        it.type == filter
-    }
+    var query by remember { mutableStateOf("") }
+
+    val shown = records
+        .filter {
+            filter == "همه" ||
+                (filter == "آزمایش" && it.type.startsWith("آزمایش")) ||
+                it.type == filter
+        }
+        .filter {
+            query.isBlank() ||
+                it.title.contains(query, true) ||
+                it.result.contains(query, true) ||
+                it.type.contains(query, true)
+        }
+        .sortedByDescending { it.date }
+
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 92.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 104.dp)
         ) {
             item {
-                Text("آزمایش‌ها و سونوگرافی‌ها", fontFamily=Fa, fontSize=25.sp, fontWeight=FontWeight.Bold)
-                Text("نتایج و گزارش‌های بارداری را یکجا و آفلاین نگه دار.", fontFamily=Fa, fontSize=13.sp,
-                    color=MaterialTheme.colorScheme.onSurfaceVariant, modifier=Modifier.padding(top=4.dp))
-            }
-            item {
-                Row(horizontalArrangement=Arrangement.spacedBy(7.dp)) {
-                    filters.forEach {
-                        FilterChip(selected=filter==it, onClick={filter=it},
-                            label={Text(it,fontFamily=Fa,fontSize=12.sp)})
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "پرونده پزشکی",
+                            fontFamily = Fa, fontSize = 26.sp, fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "آزمایش‌ها و سونوگرافی‌های بارداری",
+                            fontFamily = Fa, fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                }
-            }
-            if (shown.isEmpty()) {
-                item {
-                    Card(shape=RoundedCornerShape(24.dp), colors=CardDefaults.cardColors(containerColor=Blush)) {
-                        Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment=Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Assignment,null,tint=RoseDark,modifier=Modifier.size(48.dp))
-                            Text("هنوز گزارشی ثبت نشده",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,modifier=Modifier.padding(top=10.dp))
-                            Text("نتیجه آزمایش یا سونوگرافی بعدی را اینجا ثبت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Surface(
+                        shape = CircleShape,
+                        color = Blush,
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Assignment, null, tint = RoseDark)
                         }
                     }
                 }
-            } else {
-                items(shown,key={it.id}) { record ->
-                    val age=pregnancy.age(record.date)
-                    Card(Modifier.fillMaxWidth().clickable{onOpen(record)},shape=RoundedCornerShape(20.dp),
-                        colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
-                        Row(Modifier.padding(15.dp),verticalAlignment=Alignment.Top) {
-                            Surface(shape=RoundedCornerShape(14.dp),color=Blush,modifier=Modifier.size(46.dp)) {
-                                Box(contentAlignment=Alignment.Center) {
-                                    Icon(if(record.type=="سونوگرافی"||record.type=="آنومالی") Icons.Default.ImageSearch
-                                        else if(record.type.startsWith("آزمایش")) Icons.Default.Science else Icons.Default.Assignment,
-                                        null,tint=RoseDark)
+            }
+
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                singleLine = true,
+                                textStyle = LocalTextStyle.current.copy(
+                                    fontFamily = Fa, fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+                            )
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { query = "" }, modifier = Modifier.size(30.dp)) {
+                                    Icon(Icons.Default.Close, null, modifier = Modifier.size(17.dp))
                                 }
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(record.title.ifBlank{record.type},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
-                                Text(record.type+" • "+jalali(record.date),fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("هفته "+fa(age.first)+"، روز "+fa(age.second),fontFamily=Fa,fontSize=12.sp,color=RoseDark,modifier=Modifier.padding(top=4.dp))
-                                if(record.result.isNotBlank()) Text(record.result,fontFamily=Fa,fontSize=13.sp,maxLines=2,modifier=Modifier.padding(top=5.dp))
-                            }
-                            Icon(Icons.Default.ChevronLeft,null,tint=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                }
+            }
+
+            item {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    examFilters.forEach { item ->
+                        FilterChip(
+                            selected = filter == item,
+                            onClick = { filter = item },
+                            label = { Text(item, fontFamily = Fa, fontSize = 12.sp) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (shown.isEmpty()) "گزارشی وجود ندارد" else "گزارش‌های ثبت‌شده",
+                        fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 16.sp
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (shown.isNotEmpty()) {
+                        Text(
+                            fa(shown.size) + " مورد",
+                            fontFamily = Fa, fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            if (shown.isEmpty()) {
+                item {
+                    EmptyExamsCard(query.isNotBlank(), onAdd)
+                }
+            } else {
+                items(shown, key = { it.id }) { record ->
+                    ExamRecordCard(record, pregnancy) { onOpen(record) }
                 }
             }
         }
-        FloatingActionButton(onClick=onAdd,modifier=Modifier.align(Alignment.BottomEnd).padding(end=20.dp,bottom=18.dp)) {
-            Icon(Icons.Default.Add,contentDescription="افزودن")
+
+        ExtendedFloatingActionButton(
+            onClick = onAdd,
+            icon = { Icon(Icons.Default.Add, null) },
+            text = { Text("ثبت گزارش", fontFamily = Fa, fontWeight = FontWeight.Bold) },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp),
+            shape = RoundedCornerShape(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun EmptyExamsCard(filtered: Boolean, onAdd: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Blush),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface, modifier = Modifier.size(68.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Assignment, null, tint = RoseDark, modifier = Modifier.size(32.dp))
+                }
+            }
+            Text(
+                if (filtered) "نتیجه‌ای پیدا نشد" else "پرونده هنوز خالی است",
+                fontFamily = Fa, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 14.dp)
+            )
+            Text(
+                if (filtered) "فیلتر یا عبارت جستجو را تغییر بده."
+                else "اولین آزمایش یا سونوگرافی را ثبت کن تا سابقه بارداری اینجا مرتب بماند.",
+                fontFamily = Fa, fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            if (!filtered) {
+                Button(
+                    onClick = onAdd,
+                    modifier = Modifier.padding(top = 16.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("ثبت اولین گزارش", fontFamily = Fa)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExamRecordCard(record: ExamRecord, pregnancy: Pregnancy, onClick: () -> Unit) {
+    val age = pregnancy.age(record.date)
+    Card(
+        Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(Modifier.padding(15.dp), verticalAlignment = Alignment.Top) {
+            Surface(
+                shape = RoundedCornerShape(15.dp),
+                color = Blush,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(examIcon(record.type), null, tint = RoseDark, modifier = Modifier.size(23.dp))
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        record.title.ifBlank { record.type },
+                        fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                        maxLines = 1, modifier = Modifier.weight(1f)
+                    )
+                    if (record.attachmentUri != null) {
+                        Icon(Icons.Default.AttachFile, null, modifier = Modifier.size(17.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    examTypeShort(record.type) + "  •  " + jalali(record.date),
+                    fontFamily = Fa, fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    Modifier.padding(top = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(9.dp),
+                        color = Blush
+                    ) {
+                        Text(
+                            "هفته " + fa(age.first) + "، روز " + fa(age.second),
+                            fontFamily = Fa, fontSize = 11.sp, color = RoseDark,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    if (record.result.isNotBlank()) {
+                        Text(
+                            record.result.replace("\n", " "),
+                            fontFamily = Fa, fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+            Icon(
+                Icons.Default.ChevronLeft, null,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(top = 13.dp)
+            )
         }
     }
 }
@@ -140,84 +344,277 @@ fun ExamsModern(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExamEditorDialog(
-    initial: ExamRecord?, onSave:(ExamRecord)->Unit,
-    onDelete:((ExamRecord)->Unit)?, onCancel:()->Unit
+    initial: ExamRecord?, onSave: (ExamRecord) -> Unit,
+    onDelete: ((ExamRecord) -> Unit)?, onCancel: () -> Unit
 ) {
-    val context=androidx.compose.ui.platform.LocalContext.current
-    var date by remember{mutableStateOf(initial?.date ?: LocalDate.now())}
-    var type by remember{mutableStateOf(initial?.type ?: "سونوگرافی")}
-    var title by remember{mutableStateOf(initial?.title ?: "")}
-    var result by remember{mutableStateOf(initial?.result ?: "")}
-    var notes by remember{mutableStateOf(initial?.notes ?: "")}
-    var attachment by remember{mutableStateOf(initial?.attachmentUri)}
-    var typeExpanded by remember{mutableStateOf(false)}
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var date by remember { mutableStateOf(initial?.date ?: LocalDate.now()) }
+    var type by remember { mutableStateOf(initial?.type ?: "سونوگرافی") }
+    var title by remember { mutableStateOf(initial?.title ?: "") }
+    var result by remember { mutableStateOf(initial?.result ?: "") }
+    var notes by remember { mutableStateOf(initial?.notes ?: "") }
+    var attachment by remember { mutableStateOf(initial?.attachmentUri) }
+    var typeExpanded by remember { mutableStateOf(false) }
+    val scroll = rememberScrollState()
 
-    val imagePicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
-        uri?.let{
-            runCatching{context.contentResolver.takePersistableUriPermission(it,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
-            attachment=it.toString()
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            attachment = it.toString()
         }
     }
 
-    AlertDialog(
-        onDismissRequest=onCancel,
-        title={Text(if(initial==null)"ثبت گزارش جدید" else "ویرایش گزارش",fontFamily=Fa,fontWeight=FontWeight.Bold)},
-        text={
-            Column(Modifier.fillMaxWidth().heightIn(max=560.dp),verticalArrangement=Arrangement.spacedBy(9.dp)){
-                ExposedDropdownMenuBox(expanded=typeExpanded,onExpandedChange={typeExpanded=!typeExpanded}){
-                    OutlinedTextField(value=type,onValueChange={},readOnly=true,label={Text("نوع گزارش",fontFamily=Fa)},
-                        trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded)},modifier=Modifier.fillMaxWidth().menuAnchor(),
-                        shape=RoundedCornerShape(14.dp))
-                    ExposedDropdownMenu(expanded=typeExpanded,onDismissRequest={typeExpanded=false}){
-                        examTypes.forEach{label->DropdownMenuItem(text={Text(label,fontFamily=Fa)},onClick={type=label;typeExpanded=false})}
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 680.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(shape = CircleShape, color = Blush, modifier = Modifier.size(42.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(if (initial == null) Icons.Default.Add else Icons.Default.Edit, null, tint = RoseDark)
+                        }
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (initial == null) "ثبت گزارش جدید" else "ویرایش گزارش",
+                            fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 19.sp
+                        )
+                        Text("اطلاعات را برای نگهداری در پرونده وارد کن",
+                            fontFamily = Fa, fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onCancel) { Icon(Icons.Default.Close, "بستن") }
+                }
+                HorizontalDivider()
+                Column(
+                    Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll).padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(11.dp)
+                ) {
+                    Text("نوع و تاریخ", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    ExposedDropdownMenuBox(
+                        expanded = typeExpanded,
+                        onExpandedChange = { typeExpanded = !typeExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = type, onValueChange = {}, readOnly = true,
+                            label = { Text("نوع گزارش", fontFamily = Fa) },
+                            leadingIcon = { Icon(examIcon(type), null) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            shape = RoundedCornerShape(15.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = typeExpanded,
+                            onDismissRequest = { typeExpanded = false }
+                        ) {
+                            examTypes.forEach { label ->
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(examIcon(label), null) },
+                                    text = { Text(label, fontFamily = Fa) },
+                                    onClick = { type = label; typeExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            DatePickerDialog(
+                                context,
+                                { _, y, m, d -> date = LocalDate.of(y, m + 1, d) },
+                                date.year, date.monthValue - 1, date.dayOfMonth
+                            ).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(15.dp),
+                        contentPadding = PaddingValues(vertical = 13.dp)
+                    ) {
+                        Icon(Icons.Default.Event, null)
+                        Spacer(Modifier.width(8.dp))
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text("تاریخ گزارش", fontFamily = Fa, fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(jalali(date) + "  •  " + date, fontFamily = Fa, fontSize = 13.sp)
+                        }
+                    }
+
+                    Text("جزئیات", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    OutlinedTextField(
+                        title, { title = it }, label = { Text("عنوان / نام آزمایش", fontFamily = Fa) },
+                        leadingIcon = { Icon(Icons.Default.Title, null) },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(15.dp)
+                    )
+                    OutlinedTextField(
+                        result, { result = it }, label = { Text("نتیجه", fontFamily = Fa) },
+                        leadingIcon = { Icon(Icons.Default.Notes, null) },
+                        modifier = Modifier.fillMaxWidth(), minLines = 4, maxLines = 7,
+                        shape = RoundedCornerShape(15.dp)
+                    )
+                    OutlinedTextField(
+                        notes, { notes = it }, label = { Text("یادداشت پزشک", fontFamily = Fa) },
+                        leadingIcon = { Icon(Icons.Default.EditNote, null) },
+                        modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6,
+                        shape = RoundedCornerShape(15.dp)
+                    )
+                    OutlinedButton(
+                        onClick = { imagePicker.launch(arrayOf("image/*", "application/pdf")) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(15.dp),
+                        contentPadding = PaddingValues(vertical = 13.dp)
+                    ) {
+                        Icon(if (attachment == null) Icons.Default.AttachFile else Icons.Default.Attachment, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (attachment == null) "پیوست تصویر یا گزارش PDF" else "پیوست انتخاب شده",
+                            fontFamily = Fa
+                        )
                     }
                 }
-                OutlinedButton(onClick={
-                    DatePickerDialog(context,{_,y,m,d->date=LocalDate.of(y,m+1,d)},date.year,date.monthValue-1,date.dayOfMonth).show()
-                },modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){
-                    Icon(Icons.Default.Event,null);Spacer(Modifier.width(7.dp));Text(jalali(date)+"  •  "+date,fontFamily=Fa)
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (initial != null && onDelete != null) {
+                        TextButton(onClick = { onDelete(initial) }) {
+                            Text("حذف", fontFamily = Fa, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onCancel) { Text("لغو", fontFamily = Fa) }
+                    Button(
+                        onClick = {
+                            onSave(
+                                ExamRecord(
+                                    initial?.id ?: System.currentTimeMillis(),
+                                    date, type, title.trim(), result.trim(), notes.trim(), attachment
+                                )
+                            )
+                        },
+                        enabled = title.isNotBlank() || result.isNotBlank(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("ذخیره گزارش", fontFamily = Fa, fontWeight = FontWeight.Bold)
+                    }
                 }
-                OutlinedTextField(title,{title=it},label={Text("عنوان / نام آزمایش",fontFamily=Fa)},modifier=Modifier.fillMaxWidth(),singleLine=true,shape=RoundedCornerShape(14.dp))
-                OutlinedTextField(result,{result=it},label={Text("نتیجه",fontFamily=Fa)},modifier=Modifier.fillMaxWidth(),minLines=3,maxLines=5,shape=RoundedCornerShape(14.dp))
-                OutlinedTextField(notes,{notes=it},label={Text("یادداشت پزشک",fontFamily=Fa)},modifier=Modifier.fillMaxWidth(),minLines=2,maxLines=4,shape=RoundedCornerShape(14.dp))
-                OutlinedButton(onClick={imagePicker.launch(arrayOf("image/*","application/pdf"))},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){
-                    Icon(if(attachment==null)Icons.Default.AttachFile else Icons.Default.Attachment,null);Spacer(Modifier.width(7.dp))
-                    Text(if(attachment==null)"پیوست گزارش / تصویر" else "پیوست انتخاب شد",fontFamily=Fa)
-                }
-                if(attachment!=null) Text("پیوست ذخیره شده است.",fontFamily=Fa,fontSize=11.sp,color=RoseDark)
-            }
-        },
-        confirmButton={
-            Button(onClick={
-                onSave(ExamRecord(initial?.id ?: System.currentTimeMillis(),date,type,title.trim(),result.trim(),notes.trim(),attachment))
-            },enabled=title.isNotBlank()||result.isNotBlank(),shape=RoundedCornerShape(14.dp)){Text("ذخیره",fontFamily=Fa)}
-        },
-        dismissButton={
-            Row{
-                if(initial!=null&&onDelete!=null) TextButton(onClick={onDelete(initial)}){Text("حذف",fontFamily=Fa,color=MaterialTheme.colorScheme.error)}
-                TextButton(onClick=onCancel){Text("لغو",fontFamily=Fa)}
             }
         }
-    )
+    }
 }
 
 @Composable
-fun ExamDetailDialog(record:ExamRecord,pregnancy:Pregnancy,onEdit:()->Unit,onClose:()->Unit){
-    val age=pregnancy.age(record.date)
-    AlertDialog(
-        onDismissRequest=onClose,
-        icon={Icon(Icons.Default.Assignment,null,tint=RoseDark)},
-        title={Text(record.title.ifBlank{record.type},fontFamily=Fa,fontWeight=FontWeight.Bold)},
-        text={
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                Text(record.type+" • "+jalali(record.date),fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("هفته "+fa(age.first)+"، روز "+fa(age.second)+" بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold,color=RoseDark)
-                if(record.result.isNotBlank()){Text("نتیجه",fontFamily=Fa,fontWeight=FontWeight.Bold);Text(record.result,fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)}
-                if(record.notes.isNotBlank()){Text("یادداشت پزشک",fontFamily=Fa,fontWeight=FontWeight.Bold);Text(record.notes,fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)}
-                if(record.attachmentUri!=null) Text("پیوست گزارش ثبت شده است.",fontFamily=Fa,fontSize=12.sp,color=RoseDark)
+fun ExamDetailDialog(
+    record: ExamRecord, pregnancy: Pregnancy, onEdit: () -> Unit, onClose: () -> Unit
+) {
+    val age = pregnancy.age(record.date)
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(15.dp), color = Blush, modifier = Modifier.size(50.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(examIcon(record.type), null, tint = RoseDark, modifier = Modifier.size(25.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(record.title.ifBlank { record.type }, fontFamily = Fa,
+                            fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        Text(record.type + "  •  " + jalali(record.date), fontFamily = Fa, fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, "بستن") }
+                }
+
+                Spacer(Modifier.height(14.dp))
+                Surface(shape = RoundedCornerShape(16.dp), color = Blush, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.DateRange, null, tint = RoseDark, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "هفته " + fa(age.first) + "، روز " + fa(age.second) + " بارداری",
+                            fontFamily = Fa, fontWeight = FontWeight.Bold, color = RoseDark, fontSize = 13.sp
+                        )
+                    }
+                }
+
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(max = 430.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(13.dp)
+                ) {
+                    if (record.result.isNotBlank()) {
+                        DetailSection("نتیجه", record.result)
+                    }
+                    if (record.notes.isNotBlank()) {
+                        DetailSection("یادداشت پزشک", record.notes)
+                    }
+                    if (record.attachmentUri != null) {
+                        Surface(
+                            shape = RoundedCornerShape(15.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AttachFile, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("گزارش یا تصویر پیوست شده است", fontFamily = Fa, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onClose,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp)
+                    ) { Text("بستن", fontFamily = Fa) }
+                    Button(
+                        onClick = onEdit,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("ویرایش", fontFamily = Fa)
+                    }
+                }
             }
-        },
-        confirmButton={Button(onClick=onEdit,shape=RoundedCornerShape(14.dp)){Text("ویرایش",fontFamily=Fa)}},
-        dismissButton={TextButton(onClick=onClose){Text("بستن",fontFamily=Fa)}}
-    )
+        }
+    }
+}
+
+@Composable
+private fun DetailSection(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text(
+            body,
+            fontFamily = Fa, fontSize = 13.sp, lineHeight = 21.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
