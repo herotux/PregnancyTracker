@@ -463,7 +463,7 @@ fun PregnancyApp(){
                         onConnect={authorizeDrive("sync")},
                         onShare={shareDialog=true},
                         reminderEnabled=reminderEnabled,
-                        onReminder=setWeeklyReminder,
+                        onReminder={ enabled -> setWeeklyReminder(enabled) },
                         themeMode=themeMode,
                         onTheme={themeDialog=true},
                         pad=pad
