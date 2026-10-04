@@ -56,7 +56,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 
-private val Fa = FontFamily(
+val Fa = FontFamily(
     Font(R.font.vazirmatn_regular, FontWeight.Normal),
     Font(R.font.vazirmatn_medium, FontWeight.Medium),
     Font(R.font.vazirmatn_semibold, FontWeight.SemiBold),
@@ -74,10 +74,10 @@ private const val REMINDER_CHANNEL = "pregnancy_reminders"
 
 private val months = listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
 
-private fun fa(s:String)=s.map{if(it in '0'..'9') ('۰'.code+it.code-'0'.code).toChar() else it}.joinToString("")
-private fun fa(n:Int)=fa(n.toString())
+fun fa(s:String)=s.map{if(it in '0'..'9') ('۰'.code+it.code-'0'.code).toChar() else it}.joinToString("")
+fun fa(n:Int)=fa(n.toString())
 
-private fun jalali(g:LocalDate):String{
+fun jalali(g:LocalDate):String{
     val md=intArrayOf(0,31,59,90,120,151,181,212,243,273,304,334)
     val gy=g.year-1600; val gm=g.monthValue-1; val gd=g.dayOfMonth-1
     var days=365*gy+(gy+3)/4-(gy+99)/100+(gy+399)/400+gd+md[gm]
@@ -232,9 +232,9 @@ class MainActivity:ComponentActivity(){
     }
 }
 
-private val Rose = Color(0xFFB85C7A)
-private val RoseDark = Color(0xFF8F3F5D)
-private val Blush = Color(0xFFFFE8EF)
+val Rose = Color(0xFFB85C7A)
+val RoseDark = Color(0xFF8F3F5D)
+val Blush = Color(0xFFFFE8EF)
 private val Cream = Color(0xFFFFF9FA)
 private val Sage = Color(0xFFE5F2EA)
 private val AmberSoft = Color(0xFFFFF1D8)
@@ -998,28 +998,3 @@ fun InfoCardModern(title:String,body:String){
         Row(Modifier.padding(16.dp),verticalAlignment=Alignment.Top){
             Surface(shape=RoundedCornerShape(12.dp),color=Blush,modifier=Modifier.size(38.dp)){
                 Box(contentAlignment=Alignment.Center){Icon(Icons.Default.NoteAlt,null,tint=RoseDark,modifier=Modifier.size(19.dp))}
-            }
-            Spacer(Modifier.width(11.dp))
-            Column{
-                Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=13.sp,color=RoseDark)
-                Text(body,fontFamily=Fa,fontSize=14.sp,lineHeight=22.sp,modifier=Modifier.padding(top=4.dp))
-            }
-        }
-    }
-}
-
-@Composable
-fun SettingsModern(
-    due:LocalDate,
-    onDue:(LocalDate)->Unit,
-    driveEmail:String?,
-    syncStatus:String,
-    onConnect:()->Unit,
-    onShare:()->Unit,
-    reminderEnabled:Boolean,
-    onReminder:(Boolean)->Unit,
-    themeMode:String,
-    onTheme:()->Unit,
-    pad:PaddingValues
-){
-    LazyColumn(
