@@ -457,7 +457,7 @@ fun PregnancyApp(){
                 }
             ){pad->
                 when(screen){
-                    0->HomeModern(p,age,now,pad){selectedWeek=it}
+                    0->HomeModern(p,age,now,pad,{selectedWeek=it},{screen=5})
                     1->WeeksModern(age.first,pad){selectedWeek=it}
                     2->NotesModern(notes,note,{note=it},{
                         if(note.isNotBlank()){
@@ -516,7 +516,7 @@ fun PregnancyApp(){
 }
 
 @Composable
-fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onWeek:(Int)->Unit){
+fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onWeek:(Int)->Unit,onExams:()->Unit){
     val week=age.first.coerceIn(1,40)
     val plan=weeklyPlan(week)
     val daysLeft=ChronoUnit.DAYS.between(now,p.due).coerceAtLeast(0).toInt()
@@ -533,6 +533,22 @@ fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onW
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
                 MetricCard("تاریخ زایمان",jalali(p.due),Icons.Default.Event,Modifier.weight(1f))
                 MetricCard("باقی‌مانده",fa(daysLeft)+" روز",Icons.Default.HourglassBottom,Modifier.weight(1f))
+            }
+        }
+        item{
+            Card(modifier=Modifier.fillMaxWidth().clickable{onExams()},shape=RoundedCornerShape(22.dp),
+                colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+                Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically){
+                    Surface(shape=RoundedCornerShape(14.dp),color=Blush,modifier=Modifier.size(46.dp)){
+                        Box(contentAlignment=Alignment.Center){Icon(Icons.Default.Assignment,null,tint=RoseDark)}
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)){
+                        Text("آزمایش‌ها و سونوگرافی‌ها",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
+                        Text("نتایج و گزارش‌های بارداری را ثبت و مدیریت کن",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.Default.ChevronLeft,null,tint=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         item{
@@ -998,14 +1014,3 @@ fun SettingsModern(
                 "همگام‌سازی Google Drive",
                 driveEmail?.let{"حساب متصل: $it"} ?: "پشتیبان‌گیری و همگام‌سازی خودکار اطلاعات"
             ){onConnect()}
-        }
-        if(driveEmail!=null){
-            item{
-                SettingTile(Icons.Default.PersonAdd,"اشتراک‌گذاری با همسر","دسترسی ویرایش برای ایمیل Google همسر"){onShare()}
-            }
-        }
-        item{
-            Card(shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=Color.White)){
-                Row(Modifier.fillMaxWidth().padding(17.dp),verticalAlignment=Alignment.CenterVertically){
-                    Icon(Icons.Default.CloudDone,null,tint=RoseDark)
-                    Spacer(Modifier.width(12.dp))
