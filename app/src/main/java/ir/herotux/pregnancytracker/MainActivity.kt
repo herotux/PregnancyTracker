@@ -1,7 +1,10 @@
 package ir.herotux.pregnancytracker
 
 import android.os.Bundle
+import android.app.Activity
 import android.content.Context
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import android.app.DatePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +36,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
 import kotlin.math.roundToInt
 
 private val Fa = FontFamily.SansSerif
@@ -153,101 +159,199 @@ private val AmberSoft = Color(0xFFFFF1D8)
 @Composable
 fun PregnancyApp(){
     val context=androidx.compose.ui.platform.LocalContext.current
+    val activity=context as Activity
     val scope=rememberCoroutineScope()
     var due by remember{mutableStateOf(LocalDate.of(2027,2,4))}
     var loaded by remember{mutableStateOf(false)}
-    LaunchedEffect(Unit){
-        val saved=context.pregnancyStore.data.first()[DueKey]
-        if(saved!=null) runCatching{due=LocalDate.parse(saved)}
-        loaded=true
-    }
     var screen by remember{mutableIntStateOf(0)}
     var note by remember{mutableStateOf("")}
     var notes by remember{mutableStateOf(emptyList<String>())}
     var dateDialog by remember{mutableStateOf(false)}
     var selectedWeek by remember{mutableStateOf<Int?>(null)}
+    var driveEmail by remember{mutableStateOf<String?>(null)}
+    var syncStatus by remember{mutableStateOf("همگام‌سازی غیرفعال است")}
+    var shareDialog by remember{mutableStateOf(false)}
+    var partnerEmail by remember{mutableStateOf("")}
+    var pendingAction by remember{mutableStateOf("sync")}
+    var localUpdatedAt by remember{mutableLongStateOf(0L)}
+
+    LaunchedEffect(Unit){
+        val saved=context.pregnancyStore.data.first()[DueKey]
+        if(saved!=null) runCatching{due=LocalDate.parse(saved)}
+        val snapshot=DriveSync.readLocalSnapshot(context)
+        if(snapshot.first.isNotEmpty()) notes=snapshot.first
+        localUpdatedAt=snapshot.second
+        driveEmail=DriveSync.connectedEmail(context)
+        if(driveEmail!=null) syncStatus="اتصال به Google Drive فعال است"
+        loaded=true
+    }
+
+    fun saveLocal(){
+        localUpdatedAt=System.currentTimeMillis()
+        scope.launch{
+            context.pregnancyStore.edit{it[DueKey]=due.toString()}
+            DriveSync.saveLocalSnapshot(context,due,notes,localUpdatedAt)
+        }
+    }
+
+    fun applyCloud(result:CloudSyncResult){
+        due=result.dueDate
+        notes=result.notes
+        localUpdatedAt=result.updatedAt
+        scope.launch{
+            context.pregnancyStore.edit{it[DueKey]=due.toString()}
+            DriveSync.saveLocalSnapshot(context,due,notes,localUpdatedAt)
+        }
+    }
+
+    val authLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()){result->
+        if(result.data==null) {
+            syncStatus="اجازه Google لغو شد"
+        } else {
+            runCatching{
+                Identity.getAuthorizationClient(activity).getAuthorizationResultFromIntent(result.data)
+            }.onSuccess{auth->
+                val token=auth.accessToken
+                if(token.isNullOrBlank()){
+                    syncStatus="توکن Google دریافت نشد"
+                }else{
+                    scope.launch{
+                        runCatching{
+                            if(pendingAction=="share"){
+                                DriveSync.shareWith(context,token,partnerEmail)
+                                syncStatus="پرونده برای $partnerEmail به اشتراک گذاشته شد"
+                            }else{
+                                val email=driveEmail ?: auth.toGoogleSignInAccount()?.email ?: "Google"
+                                val resultData=DriveSync.connectAndSync(context,email,token,due,notes,localUpdatedAt)
+                                driveEmail=email
+                                syncStatus="آخرین همگام‌سازی: همین الان"
+                                applyCloud(resultData)
+                            }
+                        }.onFailure{
+                            syncStatus="خطا در همگام‌سازی: "+(it.message ?: "خطای ناشناخته")
+                        }
+                    }
+                }
+            }.onFailure{syncStatus="دریافت مجوز Google ناموفق بود"}
+        }
+    }
+
+    fun authorizeDrive(action:String){
+        pendingAction=action
+        val request=AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(Scope(DriveSync.DRIVE_SCOPE)))
+            .build()
+        Identity.getAuthorizationClient(activity).authorize(request)
+            .addOnSuccessListener{auth->
+                if(auth.hasResolution()){
+                    auth.pendingIntent?.let{
+                        authLauncher.launch(IntentSenderRequest.Builder(it.intentSender).build())
+                    }else{
+                        syncStatus="Google نیاز به تأیید دسترسی دارد"
+                    }
+                }else{
+                    val token=auth.accessToken
+                    if(token.isNullOrBlank()){
+                        syncStatus="توکن Google دریافت نشد"
+                    }else{
+                        scope.launch{
+                            runCatching{
+                                if(action=="share"){
+                                    DriveSync.shareWith(context,token,partnerEmail)
+                                    syncStatus="پرونده برای $partnerEmail به اشتراک گذاشته شد"
+                                }else{
+                                    val email=driveEmail ?: auth.toGoogleSignInAccount()?.email ?: "Google"
+                                    val resultData=DriveSync.connectAndSync(context,email,token,due,notes,localUpdatedAt)
+                                    driveEmail=email
+                                    applyCloud(resultData)
+                                    syncStatus="همگام‌سازی انجام شد"
+                                }
+                            }.onFailure{
+                                syncStatus="خطا: "+(it.message ?: "خطای ناشناخته")
+                            }
+                        }
+                    }
+                }
+            }
+            .addOnFailureListener{syncStatus="اتصال به Google ناموفق بود: "+(it.message ?: "")}
+    }
+
+    if(!loaded) return
 
     val p=Pregnancy(due)
     val now=LocalDate.now()
     val age=p.age(now)
     val colors=lightColorScheme(
-        primary=RoseDark,
-        onPrimary=Color.White,
-        primaryContainer=Blush,
-        onPrimaryContainer=RoseDark,
-        secondary=Color(0xFF6D5A63),
-        background=Cream,
-        surface=Cream,
-        surfaceVariant=Color(0xFFF5ECEF)
+        primary=RoseDark,onPrimary=Color.White,primaryContainer=Blush,onPrimaryContainer=RoseDark,
+        secondary=Color(0xFF6D5A63),background=Cream,surface=Cream,surfaceVariant=Color(0xFFF5ECEF)
     )
 
-    if(!loaded) return
     MaterialTheme(colorScheme=colors){
         CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl){
             Scaffold(
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={
-                            Column(horizontalAlignment=Alignment.CenterHorizontally){
-                                Text(
-                                    when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";else->"تنظیمات"},
-                                    fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp
-                                )
-                            }
-                        },
-                        navigationIcon={
-                            IconButton({dateDialog=true}){
-                                Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)
-                            }
-                        },
-                        actions={
-                            IconButton({screen=3}){
-                                Icon(Icons.Default.Settings,null)
-                            }
-                        },
-                        colors=TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor=MaterialTheme.colorScheme.background
-                        )
+                        title={Text(when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";else->"تنظیمات"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        navigationIcon={IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}},
+                        actions={IconButton({screen=3}){Icon(Icons.Default.Settings,null)}},
+                        colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
                     )
                 },
                 bottomBar={
-                    NavigationBar(
-                        containerColor=Color.White,
-                        tonalElevation=3.dp
-                    ){
-                        listOf(
-                            "خانه" to Icons.Default.Home,
-                            "هفته‌ها" to Icons.Default.CalendarMonth,
-                            "یادداشت‌ها" to Icons.Default.NoteAlt,
-                            "تنظیمات" to Icons.Default.Settings
-                        ).forEachIndexed{i,(label,icon)->
-                            NavigationBarItem(
-                                selected=screen==i,
-                                onClick={screen=i},
-                                icon={Icon(icon,null)},
-                                label={Text(label,fontFamily=Fa,fontSize=11.sp)},
-                                alwaysShowLabel=true
-                            )
-                        }
+                    NavigationBar(containerColor=Color.White,tonalElevation=3.dp){
+                        listOf("خانه" to Icons.Default.Home,"هفته‌ها" to Icons.Default.CalendarMonth,"یادداشت‌ها" to Icons.Default.NoteAlt,"تنظیمات" to Icons.Default.Settings)
+                            .forEachIndexed{i,(label,icon)->
+                                NavigationBarItem(selected=screen==i,onClick={screen=i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
+                            }
                     }
                 }
             ){pad->
                 when(screen){
                     0->HomeModern(p,age,now,pad){selectedWeek=it}
                     1->WeeksModern(age.first,pad){selectedWeek=it}
-                    2->NotesModern(notes,note,{note=it},{if(note.isNotBlank()){notes=notes+note;note=""}},pad)
-                    else->SettingsModern(due,{due=it},pad)
+                    2->NotesModern(notes,note,{note=it},{
+                        if(note.isNotBlank()){
+                            notes=notes+note
+                            note=""
+                            saveLocal()
+                            if(driveEmail!=null) authorizeDrive("sync")
+                        }
+                    },pad)
+                    else->SettingsModern(
+                        due=due,
+                        onDue={newDue->due=newDue;saveLocal()},
+                        driveEmail=driveEmail,
+                        syncStatus=syncStatus,
+                        onConnect={authorizeDrive("sync")},
+                        onShare={shareDialog=true},
+                        pad=pad
+                    )
                 }
             }
         }
     }
+
     if(dateDialog) DateDialogModern(due,{newDue->
         due=newDue
-        scope.launch{context.pregnancyStore.edit{it[DueKey]=newDue.toString()}}
+        saveLocal()
         dateDialog=false
+        if(driveEmail!=null) authorizeDrive("sync")
     },{dateDialog=false})
+
     selectedWeek?.let{WeekDialogModern(weeklyPlan(it)){selectedWeek=null}}
+
+    if(shareDialog) DriveShareDialog(
+        email=partnerEmail,
+        onEmail={partnerEmail=it},
+        onConfirm={
+            if(partnerEmail.contains("@")){
+                shareDialog=false
+                authorizeDrive("share")
+            }
+        },
+        onCancel={shareDialog=false}
+    )
 }
 
 @Composable
@@ -609,7 +713,15 @@ fun InfoCardModern(title:String,body:String){
 }
 
 @Composable
-fun SettingsModern(due:LocalDate,onDue:(LocalDate)->Unit,pad:PaddingValues){
+fun SettingsModern(
+    due:LocalDate,
+    onDue:(LocalDate)->Unit,
+    driveEmail:String?,
+    syncStatus:String,
+    onConnect:()->Unit,
+    onShare:()->Unit,
+    pad:PaddingValues
+){
     LazyColumn(
         Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),
         verticalArrangement=Arrangement.spacedBy(12.dp),
@@ -617,24 +729,72 @@ fun SettingsModern(due:LocalDate,onDue:(LocalDate)->Unit,pad:PaddingValues){
     ){
         item{
             Text("تنظیمات",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold)
-            Text("اطلاعات بارداری و ظاهر برنامه را مدیریت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
+            Text("اطلاعات بارداری، همگام‌سازی و ظاهر برنامه را مدیریت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
+        }
+        item{SettingTile(Icons.Default.Event,"تاریخ زایمان","تاریخ فعلی: "+jalali(due)){onDue(due)}}
+        item{SettingTile(Icons.Default.Language,"تقویم","نمایش همزمان تاریخ شمسی و میلادی"){}}
+        item{
+            SettingTile(
+                Icons.Default.CloudSync,
+                "همگام‌سازی Google Drive",
+                driveEmail?.let{"حساب متصل: $it"} ?: "پشتیبان‌گیری و همگام‌سازی خودکار اطلاعات"
+            ){onConnect()}
+        }
+        if(driveEmail!=null){
+            item{
+                SettingTile(Icons.Default.PersonAdd,"اشتراک‌گذاری با همسر","دسترسی ویرایش برای ایمیل Google همسر"){onShare()}
+            }
         }
         item{
-            SettingTile(Icons.Default.Event,"تاریخ زایمان","تاریخ فعلی: "+jalali(due)){onDue(due)}
+            Card(shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=Color.White)){
+                Row(Modifier.fillMaxWidth().padding(17.dp),verticalAlignment=Alignment.CenterVertically){
+                    Icon(Icons.Default.CloudDone,null,tint=RoseDark)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)){
+                        Text("وضعیت همگام‌سازی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
+                        Text(syncStatus,fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=3.dp))
+                    }
+                    TextButton(onClick=onConnect){Text("همگام‌سازی",fontFamily=Fa)}
+                }
+            }
         }
-        item{SettingTile(Icons.Default.Language,"تقویم","نمایش همزمان تاریخ شمسی و میلادی"){}}
-        item{SettingTile(Icons.Default.NotificationsNone,"یادآوری‌ها","در نسخه بعدی: یادآوری ویزیت، آزمایش و شروع هر هفته"){}}
+        item{SettingTile(Icons.Default.NotificationsNone,"یادآوری‌ها","یادآوری ویزیت، آزمایش و شروع هر هفته"){}}
         item{SettingTile(Icons.Default.Palette,"ظاهر برنامه","طراحی فارسی، RTL و Material 3"){}}
         item{
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
                 Row(Modifier.padding(18.dp),verticalAlignment=Alignment.Top){
                     Icon(Icons.Default.Info,null,tint=RoseDark)
                     Spacer(Modifier.width(10.dp))
-                    Text("این برنامه آموزشی است و جایگزین تشخیص یا توصیه شخصی پزشک نیست. در علائم شدید یا اورژانسی از خدمات درمانی محل زندگی کمک بگیر.",fontFamily=Fa,fontSize=13.sp,lineHeight=21.sp)
+                    Text("این برنامه آموزشی است و جایگزین تشخیص یا توصیه شخصی پزشک نیست. اطلاعات همگام‌شده در Google Drive متعلق به حساب Google شماست و فقط به حساب‌هایی که خودتان به اشتراک می‌گذارید دسترسی ویرایش می‌دهد.",fontFamily=Fa,fontSize=13.sp,lineHeight=21.sp)
                 }
             }
         }
     }
+}
+
+@Composable
+fun DriveShareDialog(email:String,onEmail:(String)->Unit,onConfirm:()->Unit,onCancel:()->Unit){
+    AlertDialog(
+        onDismissRequest=onCancel,
+        icon={Icon(Icons.Default.PersonAdd,null,tint=RoseDark)},
+        title={Text("اشتراک‌گذاری پرونده بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold)},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
+                Text("ایمیل Google همسر را وارد کن. او بعد از پذیرفتن دعوت می‌تواند همین پرونده را در نسخه خودش همگام کند.",fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)
+                OutlinedTextField(
+                    value=email,
+                    onValueChange=onEmail,
+                    singleLine=true,
+                    label={Text("ایمیل Google همسر",fontFamily=Fa)},
+                    placeholder={Text("example@gmail.com",fontFamily=Fa)},
+                    modifier=Modifier.fillMaxWidth(),
+                    shape=RoundedCornerShape(14.dp)
+                )
+            }
+        },
+        confirmButton={Button(onClick=onConfirm,enabled=email.contains("@")){Text("اشتراک‌گذاری",fontFamily=Fa)}},
+        dismissButton={TextButton(onClick=onCancel){Text("لغو",fontFamily=Fa)}}
+    )
 }
 
 @Composable
