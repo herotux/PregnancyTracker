@@ -50,6 +50,7 @@ private data class CloudPayload(
 
 object DriveSync {
     const val DRIVE_SCOPE = Scopes.DRIVE_FILE
+    const val EMAIL_SCOPE = Scopes.EMAIL
     private const val FILE_NAME = "PregnancyTracker-Shared-Data.json"
     private const val MIME = "application/json"
     private const val BASE = "https://www.googleapis.com"
@@ -114,6 +115,13 @@ object DriveSync {
             }.getOrNull()
         } ?: emptyList()
         return notes to (context.cloudStore.data.first()[CloudUpdatedKey] ?: 0L)
+    }
+
+    suspend fun accountEmail(accessToken: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            request("GET", "https://www.googleapis.com/oauth2/v2/userinfo", accessToken)
+                .optString("email").takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     suspend fun connectedEmail(context: Context): String? =
