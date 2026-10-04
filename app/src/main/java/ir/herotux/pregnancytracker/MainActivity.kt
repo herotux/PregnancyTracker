@@ -254,6 +254,7 @@ fun PregnancyApp(){
     var selectedDate by remember{mutableStateOf(LocalDate.now())}
     var note by remember{mutableStateOf("")}
     var notes by remember{mutableStateOf(emptyList<String>())}
+    var noteEditIndex by remember{mutableStateOf<Int?>(null)}
     var dateDialog by remember{mutableStateOf(false)}
     var selectedWeek by remember{mutableStateOf<Int?>(null)}
     var driveEmail by remember{mutableStateOf<String?>(null)}
@@ -449,8 +450,11 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";else->"خانه"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
-                        navigationIcon={IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}},
+                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        navigationIcon={
+                            if(screen==7) IconButton({screen=4}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
+                            else IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}
+                        },
                         actions={IconButton({screen=4}){Icon(Icons.Default.Settings,null)}},
                         colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
                     )
@@ -467,14 +471,31 @@ fun PregnancyApp(){
                 when(screen){
                     0->HomeModern(p,age,now,pad,{selectedWeek=it},{screen=5})
                     1->CurrentWeekModern(age.first,age.second,now,p,pad,{selectedWeek=it},{screen=6})
-                    2->NotesModern(notes,note,{note=it},{
-                        if(note.isNotBlank()){
-                            notes=notes+note
-                            note=""
+                    2->NotesModern(
+                        notes=notes,
+                        text=note,
+                        editingIndex=noteEditIndex,
+                        onText={note=it},
+                        onEdit={index->{noteEditIndex=index;note=notes[index]}},
+                        onDelete={index->{
+                            notes=notes.filterIndexed{position,_->position!=index}
+                            if(noteEditIndex==index){noteEditIndex=null;note=""}
                             saveLocal()
                             if(driveEmail!=null) authorizeDrive("sync")
-                        }
-                    },pad)
+                        }},
+                        onSave={
+                            if(note.isNotBlank()){
+                                val edited=noteEditIndex
+                                notes=if(edited==null) notes+note else notes.mapIndexed{index,value->if(index==edited) note else value}
+                                note=""
+                                noteEditIndex=null
+                                saveLocal()
+                                if(driveEmail!=null) authorizeDrive("sync")
+                            }
+                        },
+                        onCancelEdit={noteEditIndex=null;note=""},
+                        pad=pad
+                    )
                     3->CalendarModern(due, calendarMonth, {calendarMonth=it}, selectedDate, {selectedDate=it}, {dateDialog=true}, pad)
                     4->SettingsModern(
                         due=due,
@@ -487,10 +508,12 @@ fun PregnancyApp(){
                         onReminder={ enabled -> setWeeklyReminder(enabled) },
                         themeMode=themeMode,
                         onTheme={themeDialog=true},
-                        pad=pad
+                        pad=pad,
+                        onAbout={screen=7}
                     )
                     5->ExamsModern(records=exams,pregnancy=p,onAdd={examEditor=null;examEditorOpen=true},onEdit={examEditor=it;examEditorOpen=true},onDelete={record->exams=exams.filterNot{it.id==record.id};saveExams();examEditorOpen=false},onOpen={examDetail=it},pad=pad)
                     6->WeeksModern(age.first,pad){selectedWeek=it}
+                    7->AboutModern(pad)
                 }
             }
         }
@@ -1218,7 +1241,17 @@ fun ModernSection(title:String,items:List<String>,icon:androidx.compose.ui.graph
 }
 
 @Composable
-fun NotesModern(notes:List<String>,text:String,onText:(String)->Unit,onAdd:()->Unit,pad:PaddingValues){
+fun NotesModern(
+    notes: List<String>,
+    text: String,
+    editingIndex: Int?,
+    onText: (String) -> Unit,
+    onEdit: (Int) -> Unit,
+    onDelete: (Int) -> Unit,
+    onSave: () -> Unit,
+    onCancelEdit: () -> Unit,
+    pad: PaddingValues
+){
     LazyColumn(
         Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),
         verticalArrangement=Arrangement.spacedBy(12.dp),
@@ -1226,24 +1259,41 @@ fun NotesModern(notes:List<String>,text:String,onText:(String)->Unit,onAdd:()->U
     ){
         item{
             Text("یادداشت‌های من",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold)
-            Text("قرارها، علائم، سؤال‌ها و نکات مهم را اینجا ثبت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
+            Text(
+                "قرارها، علائم، سؤال‌ها و نکات مهم را اینجا ثبت کن.",
+                fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier=Modifier.padding(top=4.dp)
+            )
         }
         item{
-            Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Color.White)){
+            Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
                 Column(Modifier.padding(16.dp)){
                     OutlinedTextField(
                         value=text,
                         onValueChange=onText,
-                        label={Text("یادداشت جدید",fontFamily=Fa)},
+                        label={Text(if(editingIndex==null)"یادداشت جدید" else "ویرایش یادداشت",fontFamily=Fa)},
                         placeholder={Text("مثلاً: سؤال برای ویزیت بعدی...",fontFamily=Fa)},
                         modifier=Modifier.fillMaxWidth(),
                         minLines=3,
                         shape=RoundedCornerShape(16.dp)
                     )
-                    Button(onClick=onAdd,modifier=Modifier.fillMaxWidth().padding(top=10.dp),shape=RoundedCornerShape(15.dp)){
-                        Icon(Icons.Default.Add,null)
+                    Button(
+                        onClick=onSave,
+                        enabled=text.isNotBlank(),
+                        modifier=Modifier.fillMaxWidth().padding(top=10.dp),
+                        shape=RoundedCornerShape(15.dp)
+                    ){
+                        Icon(if(editingIndex==null) Icons.Default.Add else Icons.Default.Save,null)
                         Spacer(Modifier.width(7.dp))
-                        Text("ذخیره یادداشت",fontFamily=Fa)
+                        Text(if(editingIndex==null)"ذخیره یادداشت" else "ذخیره ویرایش",fontFamily=Fa)
+                    }
+                    if(editingIndex!=null){
+                        TextButton(
+                            onClick=onCancelEdit,
+                            modifier=Modifier.fillMaxWidth()
+                        ){
+                            Text("لغو ویرایش",fontFamily=Fa)
+                        }
                     }
                 }
             }
@@ -1259,22 +1309,47 @@ fun NotesModern(notes:List<String>,text:String,onText:(String)->Unit,onAdd:()->U
                 }
             }
         }else{
-            items(notes.reversed()){InfoCardModern("یادداشت",it)}
+            items(notes.indices.reversed().toList()){index->
+                InfoCardModern(
+                    title="یادداشت",
+                    body=notes[index],
+                    onEdit={onEdit(index)},
+                    onDelete={onDelete(index)}
+                )
+            }
         }
     }
 }
 
 @Composable
-fun InfoCardModern(title:String,body:String){
-    Card(shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=Color.White)){
+fun InfoCardModern(
+    title:String,
+    body:String,
+    onEdit:()->Unit,
+    onDelete:()->Unit
+){
+    Card(shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
         Row(Modifier.padding(16.dp),verticalAlignment=Alignment.Top){
             Surface(shape=RoundedCornerShape(12.dp),color=Blush,modifier=Modifier.size(38.dp)){
-                Box(contentAlignment=Alignment.Center){Icon(Icons.Default.NoteAlt,null,tint=RoseDark,modifier=Modifier.size(19.dp))}
+                Box(contentAlignment=Alignment.Center){
+                    Icon(Icons.Default.NoteAlt,null,tint=RoseDark,modifier=Modifier.size(19.dp))
+                }
             }
             Spacer(Modifier.width(11.dp))
-            Column{
-                Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=13.sp,color=RoseDark)
-                Text(body,fontFamily=Fa,fontSize=14.sp,lineHeight=22.sp,modifier=Modifier.padding(top=4.dp))
+            Column(Modifier.weight(1f)){
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment=Alignment.CenterVertically
+                ){
+                    Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=13.sp,color=RoseDark,modifier=Modifier.weight(1f))
+                    IconButton(onClick=onEdit,modifier=Modifier.size(34.dp)){
+                        Icon(Icons.Default.Edit,"ویرایش",modifier=Modifier.size(18.dp))
+                    }
+                    IconButton(onClick=onDelete,modifier=Modifier.size(34.dp)){
+                        Icon(Icons.Default.DeleteOutline,"حذف",tint=MaterialTheme.colorScheme.error,modifier=Modifier.size(18.dp))
+                    }
+                }
+                Text(body,fontFamily=Fa,fontSize=14.sp,lineHeight=22.sp,modifier=Modifier.padding(top=2.dp))
             }
         }
     }
@@ -1292,6 +1367,7 @@ fun SettingsModern(
     onReminder:(Boolean)->Unit,
     themeMode:String,
     onTheme:()->Unit,
+    onAbout:()->Unit,
     pad:PaddingValues
 ){
     LazyColumn(
@@ -1343,6 +1419,13 @@ fun SettingsModern(
                 "ظاهر برنامه",
                 when(themeMode){"dark"->"حالت تاریک";"light"->"حالت روشن";else->"همگام با تنظیمات دستگاه"}
             ){onTheme()}
+        }
+        item{
+            SettingTile(
+                Icons.Default.Info,
+                "درباره نونو",
+                "نسخه، توسعه‌دهنده و اطلاعات برنامه"
+            ){onAbout()}
         }
         item{
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
@@ -1429,4 +1512,110 @@ fun SettingTile(icon:androidx.compose.ui.graphics.vector.ImageVector,title:Strin
 @Composable
 fun DateDialogModern(current:LocalDate,onOk:(LocalDate)->Unit,onCancel:()->Unit){
     PersianDatePickerDialog(initialDate=current,onSelect=onOk,onDismiss=onCancel)
+}
+
+
+@Composable
+fun AboutModern(pad: PaddingValues){
+    LazyColumn(
+        Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),
+        verticalArrangement=Arrangement.spacedBy(14.dp),
+        contentPadding=PaddingValues(top=8.dp,bottom=28.dp)
+    ){
+        item{
+            Card(
+                shape=RoundedCornerShape(30.dp),
+                colors=CardDefaults.cardColors(containerColor=RoseDark)
+            ){
+                Column(
+                    Modifier.fillMaxWidth().padding(24.dp),
+                    horizontalAlignment=Alignment.CenterHorizontally
+                ){
+                    Surface(
+                        shape=CircleShape,
+                        color=Color.White,
+                        modifier=Modifier.size(104.dp)
+                    ){
+                        Box(contentAlignment=Alignment.Center){
+                            Icon(
+                                Icons.Default.ChildCare,
+                                contentDescription=null,
+                                tint=RoseDark,
+                                modifier=Modifier.size(58.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        "نونو",
+                        fontFamily=Fa,
+                        fontSize=30.sp,
+                        fontWeight=FontWeight.ExtraBold,
+                        color=Color.White,
+                        modifier=Modifier.padding(top=14.dp)
+                    )
+                    Text(
+                        "ردیاب بارداری",
+                        fontFamily=Fa,
+                        fontSize=14.sp,
+                        color=Color.White.copy(alpha=.88f)
+                    )
+                }
+            }
+        }
+        item{
+            Card(shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+                Column(Modifier.padding(19.dp),verticalArrangement=Arrangement.spacedBy(13.dp)){
+                    Text("درباره برنامه",fontFamily=Fa,fontSize=18.sp,fontWeight=FontWeight.Bold)
+                    Text(
+                        "نونو برای ثبت و پیگیری روزهای بارداری، برنامه هفتگی، یادداشت‌ها، آزمایش‌ها و سونوگرافی‌ها و یادآوری‌های کاربردی طراحی شده است.",
+                        fontFamily=Fa,fontSize=13.sp,lineHeight=22.sp
+                    )
+                    HorizontalDivider()
+                    AboutRow("نسخه","۱.۰.۰",Icons.Default.Info)
+                    AboutRow("توسعه‌دهنده","حمید صیدی",Icons.Default.Person)
+                    AboutRow("GitHub","herotux",Icons.Default.Code)
+                    AboutRow("فناوری","Kotlin • Jetpack Compose • Material 3",Icons.Default.Code)
+                }
+            }
+        }
+        item{
+            Card(shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
+                Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.Top){
+                    Icon(Icons.Default.CalendarMonth,null,tint=RoseDark)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)){
+                        Text("تقویم کاملاً شمسی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp,color=RoseDark)
+                        Text(
+                            "تاریخ‌های برنامه و انتخاب تاریخ با تقویم جلالی نمایش داده می‌شوند.",
+                            fontFamily=Fa,fontSize=12.sp,lineHeight=20.sp
+                        )
+                    }
+                }
+            }
+        }
+        item{
+            Card(shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+                Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.Top){
+                    Icon(Icons.Default.Info,null,tint=RoseDark)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "نونو یک ابزار آموزشی و ثبت اطلاعات است و جایگزین تشخیص، نسخه یا توصیه شخصی پزشک نیست.",
+                        fontFamily=Fa,fontSize=12.sp,lineHeight=20.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AboutRow(label:String,value:String,icon:androidx.compose.ui.graphics.vector.ImageVector){
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+        Surface(shape=RoundedCornerShape(11.dp),color=Blush,modifier=Modifier.size(38.dp)){
+            Box(contentAlignment=Alignment.Center){Icon(icon,null,tint=RoseDark,modifier=Modifier.size(19.dp))}
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(label,fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.weight(1f))
+        Text(value,fontFamily=Fa,fontSize=13.sp,fontWeight=FontWeight.Bold,textAlign=androidx.compose.ui.text.style.TextAlign.End)
+    }
 }
