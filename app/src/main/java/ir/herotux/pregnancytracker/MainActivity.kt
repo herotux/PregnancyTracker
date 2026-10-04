@@ -247,6 +247,8 @@ fun PregnancyApp(){
     var due by remember{mutableStateOf(LocalDate.of(2027,2,4))}
     var loaded by remember{mutableStateOf(false)}
     var screen by remember{mutableIntStateOf(0)}
+    var calendarMonth by remember{mutableStateOf(LocalDate.now().withDayOfMonth(1))}
+    var selectedDate by remember{mutableStateOf(LocalDate.now())}
     var note by remember{mutableStateOf("")}
     var notes by remember{mutableStateOf(emptyList<String>())}
     var dateDialog by remember{mutableStateOf(false)}
@@ -437,7 +439,7 @@ fun PregnancyApp(){
                 },
                 bottomBar={
                     NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=3.dp){
-                        listOf("خانه" to Icons.Default.Home,"هفته‌ها" to Icons.Default.CalendarMonth,"یادداشت‌ها" to Icons.Default.NoteAlt,"تنظیمات" to Icons.Default.Settings)
+                        listOf("خانه" to Icons.Default.Home,"هفته‌ها" to Icons.Default.CalendarMonth,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings)
                             .forEachIndexed{i,(label,icon)->
                                 NavigationBarItem(selected=screen==i,onClick={screen=i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
                             }
@@ -455,7 +457,8 @@ fun PregnancyApp(){
                             if(driveEmail!=null) authorizeDrive("sync")
                         }
                     },pad)
-                    else->SettingsModern(
+                    3->CalendarModern(due, calendarMonth, {calendarMonth=it}, selectedDate, {selectedDate=it}, {dateDialog=true}, pad)
+                    4->SettingsModern(
                         due=due,
                         onDue={newDue->due=newDue;saveLocal()},
                         driveEmail=driveEmail,
@@ -705,6 +708,99 @@ fun ModernProgressChart(week:Int){
                 Text("۱",fontFamily=Fa,fontSize=11.sp)
                 Text("۲۰",fontFamily=Fa,fontSize=11.sp)
                 Text("۴۰",fontFamily=Fa,fontSize=11.sp)
+            }
+        }
+    }
+}
+
+
+@Composable
+fun CalendarModern(
+    due:LocalDate, month:LocalDate, onMonth:(LocalDate)->Unit,
+    selected:LocalDate, onSelected:(LocalDate)->Unit, onChangeDue:()->Unit,
+    pad:PaddingValues
+){
+    val today=LocalDate.now()
+    val first=month.withDayOfMonth(1)
+    val offset=first.dayOfWeek.value%7
+    val days=month.lengthOfMonth()
+    val pregnancy=Pregnancy(due)
+    val selectedAge=pregnancy.age(selected)
+    val inPregnancy=selected>=pregnancy.lmp && selected<=due
+    LazyColumn(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=8.dp,bottom=28.dp)){
+        item{
+            Text("تقویم بارداری",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold)
+            Text("تاریخ شمسی و میلادی، هفته بارداری و موعد زایمان را یکجا ببین.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
+        }
+        item{
+            Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
+                Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){
+                    Surface(shape=RoundedCornerShape(14.dp),color=Color.White,modifier=Modifier.size(48.dp)){Box(contentAlignment=Alignment.Center){Icon(Icons.Default.ChildFriendly,null,tint=RoseDark)}}
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)){
+                        Text("موعد تقریبی زایمان",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
+                        Text(jalali(due),fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,color=RoseDark)
+                        Text(due.toString(),fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick=onChangeDue){Text("تغییر",fontFamily=Fa)}
+                }
+            }
+        }
+        item{
+            Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+                Column(Modifier.padding(14.dp)){
+                    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween,modifier=Modifier.fillMaxWidth()){
+                        IconButton(onClick={onMonth(month.minusMonths(1))}){Icon(Icons.Default.ChevronRight,null)}
+                        Column(horizontalAlignment=Alignment.CenterHorizontally){
+                            Text("\${fa(month.monthValue)} / \${fa(month.year)}",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp)
+                            Text("ماه میلادی",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick={onMonth(month.plusMonths(1))}){Icon(Icons.Default.ChevronLeft,null)}
+                    }
+                    Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=6.dp),horizontalArrangement=Arrangement.SpaceBetween){
+                        listOf("ش","ی","د","س","چ","پ","ج").forEach{Box(Modifier.weight(1f),contentAlignment=Alignment.Center){Text(it,fontFamily=Fa,fontSize=11.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
+                    }
+                    val cells=List(offset){null}+List(days){it+1}
+                    cells.chunked(7).forEach{week->
+                        Row(Modifier.fillMaxWidth()){
+                            week.forEach{day->
+                                Box(Modifier.weight(1f).height(58.dp).padding(2.dp),contentAlignment=Alignment.Center){
+                                    if(day!=null){
+                                        val date=month.withDayOfMonth(day)
+                                        val isSelected=date==selected
+                                        val isToday=date==today
+                                        val isDue=date==due
+                                        val active=date>=pregnancy.lmp && date<=due
+                                        Surface(Modifier.fillMaxSize().clickable{onSelected(date)},shape=RoundedCornerShape(12.dp),color=when{isDue->Rose;isSelected->Blush;active->MaterialTheme.colorScheme.surfaceVariant;else->Color.Transparent}){
+                                            Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
+                                                Text(fa(day),fontFamily=Fa,fontSize=15.sp,fontWeight=if(isToday||isSelected||isDue)FontWeight.Bold else FontWeight.Normal,color=if(isDue)Color.White else MaterialTheme.colorScheme.onSurface)
+                                                Text(jalali(date).split(" ").first(),fontFamily=Fa,fontSize=9.sp,color=if(isDue)Color.White else RoseDark)
+                                                if(isToday) Text("امروز",fontFamily=Fa,fontSize=7.sp,color=if(isDue)Color.White else RoseDark)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            repeat(7-week.size){Box(Modifier.weight(1f).height(58.dp))}
+                        }
+                    }
+                }
+            }
+        }
+        item{
+            Card(shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+                Column(Modifier.padding(17.dp)){
+                    Text("تاریخ انتخاب‌شده",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
+                    Text(jalali(selected),fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=20.sp,color=RoseDark,modifier=Modifier.padding(top=5.dp))
+                    Text(selected.toString(),fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(10.dp))
+                    if(inPregnancy){
+                        Text("هفته \${fa(selectedAge.first)}، روز \${fa(selectedAge.second)} بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
+                        Text(if(selected==due)"این تاریخ، موعد تقریبی زایمان است." else if(selected<today)"این تاریخ در گذشته است." else "این تاریخ در بازه بارداری قرار دارد.",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=3.dp))
+                    }else{
+                        Text(if(selected<pregnancy.lmp)"این تاریخ پیش از شروع محاسبات بارداری است." else "این تاریخ بعد از موعد تقریبی زایمان است.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
     }
