@@ -22,7 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -112,7 +112,7 @@ fun MedicationEditorDialog(initial:MedicationRecord?,onSave:(MedicationRecord)->
             Spacer(Modifier.height(12.dp))
             Column(Modifier.weight(1f,false).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(9.dp)){
                 OutlinedTextField(name,{name=it},label={Text("نام دارو",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Medication,null)},modifier=Modifier.fillMaxWidth(),singleLine=true,shape=RoundedCornerShape(15.dp))
-                OutlinedTextField(dosage,{dosage=it},label={Text("دوز / مقدار مصرف",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.MedicationLiquid,null)},modifier=Modifier.fillMaxWidth(),singleLine=true,shape=RoundedCornerShape(15.dp))
+                OutlinedTextField(dosage,{dosage=it},label={Text("دوز / مقدار مصرف",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.LocalPharmacy,null)},modifier=Modifier.fillMaxWidth(),singleLine=true,shape=RoundedCornerShape(15.dp))
                 Text("ساعت‌های مصرف روزانه",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
                 times.forEachIndexed{index,time->Row(verticalAlignment=Alignment.CenterVertically){OutlinedTextField(time,{v->times=times.toMutableList().also{it[index]=v}},label={Text("ساعت "+fa(index+1),fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Schedule,null)},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.weight(1f),singleLine=true,shape=RoundedCornerShape(15.dp));IconButton(onClick={if(times.size>1)times=times.toMutableList().also{it.removeAt(index)}}){Icon(Icons.Default.RemoveCircleOutline,"حذف ساعت",tint=MaterialTheme.colorScheme.error)}}}
                 Row(verticalAlignment=Alignment.CenterVertically){OutlinedTextField(newTime,{newTime=it},label={Text("ساعت جدید، مثلاً ۱۴:۳۰",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.AddAlarm,null)},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.weight(1f),singleLine=true,shape=RoundedCornerShape(15.dp));IconButton(onClick={val t=normalizeMedicationTime(newTime);if(t!=null&&t !in times){times=(times+t).sorted();newTime="";error=null}else error="ساعت را به شکل ۰۸:۰۰ وارد کن."}){Icon(Icons.Default.AddCircle,"افزودن ساعت",tint=RoseDark)}}
