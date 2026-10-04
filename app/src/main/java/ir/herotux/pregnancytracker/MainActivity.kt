@@ -312,6 +312,7 @@ fun PregnancyApp(){
         }
     }
 
+    val medicationNotificationPermissionLauncher=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){ }
     val notificationPermissionLauncher=rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ){granted->
@@ -518,6 +519,14 @@ fun PregnancyApp(){
             medications=(medications.filterNot{it.id==record.id}+record).sortedBy{it.name}
             scope.launch{saveMedications(context,medications)}
             scheduleMedicationAlarms(context,record)
+            if(android.os.Build.VERSION.SDK_INT>=33 && ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+                medicationNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if(android.os.Build.VERSION.SDK_INT>=31 && !context.getSystemService(android.app.AlarmManager::class.java).canScheduleExactAlarms()){
+                runCatching{
+                    activity.startActivity(android.content.Intent("android.settings.REQUEST_SCHEDULE_EXACT_ALARM").setData(android.net.Uri.parse("package:"+context.packageName)))
+                }
+            }
             medicationEditorOpen=false
             medicationEditor=null
         },
@@ -1157,7 +1166,7 @@ fun WeeksModern(current:Int,pad:PaddingValues,onWeek:(Int)->Unit){
 fun WeekDialogModern(plan:WeekPlan,medications:List<MedicationRecord>,onAddMedication:()->Unit,onEditMedication:(MedicationRecord)->Unit,onClose:()->Unit){
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
     BasicAlertDialog(onDismissRequest=onClose){
-        Surface(shape=RoundedCornerShape(28.dp),color=Color.White,tonalElevation=6.dp,modifier=Modifier.fillMaxWidth()){
+        Surface(shape=RoundedCornerShape(28.dp),color=MaterialTheme.colorScheme.surface,tonalElevation=6.dp,modifier=Modifier.fillMaxWidth()){
             Column(Modifier.padding(20.dp)){
                 Row(verticalAlignment=Alignment.CenterVertically){
                     Surface(shape=RoundedCornerShape(16.dp),color=Blush,modifier=Modifier.size(48.dp)){
@@ -1196,7 +1205,7 @@ fun ModernSection(title:String,items:List<String>,icon:androidx.compose.ui.graph
         Row(verticalAlignment=Alignment.CenterVertically){
             Icon(icon,null,tint=RoseDark,modifier=Modifier.size(19.dp))
             Spacer(Modifier.width(7.dp))
-            Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp,modifier=Modifier.fillMaxWidth(),textAlign=androidx.compose.ui.text.style.TextAlign.Right)
+            Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Right)
         }
         items.forEach{
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Top){
