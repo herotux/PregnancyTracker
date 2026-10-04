@@ -998,6 +998,7 @@ fun InfoCardModern(title:String,body:String){
         Row(Modifier.padding(16.dp),verticalAlignment=Alignment.Top){
             Surface(shape=RoundedCornerShape(12.dp),color=Blush,modifier=Modifier.size(38.dp)){
                 Box(contentAlignment=Alignment.Center){Icon(Icons.Default.NoteAlt,null,tint=RoseDark,modifier=Modifier.size(19.dp))}
+            }
             Spacer(Modifier.width(11.dp))
             Column{
                 Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=13.sp,color=RoseDark)
