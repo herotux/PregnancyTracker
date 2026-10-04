@@ -66,7 +66,8 @@ object DriveSync {
 
     suspend fun sync(context: Context, accessToken: String, dueDate: LocalDate, notes: List<String>, localUpdatedAt: Long): CloudSyncResult =
         withContext(Dispatchers.IO) {
-            val existingId = context.cloudStore.data.first()[CloudFileIdKey]
+            try {
+                val existingId = context.cloudStore.data.first()[CloudFileIdKey]
             val fileId = existingId ?: findFile(accessToken) ?: createFile(
                 accessToken,
                 CloudPayload(dueDate.toString(), notes.distinct(), localUpdatedAt)
@@ -85,13 +86,14 @@ object DriveSync {
                 it[LocalDueKey] = mergedDue.toString()
             }
             Log.i(TAG, "SYNC_SUCCESS fileId=$fileId")
-            CloudSyncResult(mergedDue, mergedNotes, mergedUpdated)
-        } catch (e: DriveSyncException) {
+                CloudSyncResult(mergedDue, mergedNotes, mergedUpdated)
+            } catch (e: DriveSyncException) {
             Log.e(TAG, "SYNC_FAILED stage=${e.stage} code=${e.httpCode}", e)
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "SYNC_FAILED unexpected", e)
-            throw DriveSyncException("همگام‌سازی", message = e.message ?: "خطای ناشناخته", cause = e)
+                throw DriveSyncException("همگام‌سازی", message = e.message ?: "خطای ناشناخته", cause = e)
+            }
         }
 
     suspend fun shareWith(context: Context, accessToken: String, email: String) = withContext(Dispatchers.IO) {
