@@ -72,7 +72,7 @@ private val ExamsKey = stringPreferencesKey("exam_records")
 private const val REMINDER_WORK = "pregnancy-weekly-reminder"
 private const val REMINDER_CHANNEL = "pregnancy_reminders"
 
-private val months = listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
+val months = listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
 
 fun fa(s:String)=s.map{if(it in '0'..'9') ('۰'.code+it.code-'0'.code).toChar() else it}.joinToString("")
 fun fa(n:Int)=fa(n.toString())
