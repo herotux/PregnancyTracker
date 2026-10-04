@@ -68,6 +68,7 @@ private val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_set
 private val DueKey = stringPreferencesKey("due_date")
 private val ThemeKey = stringPreferencesKey("theme_mode")
 private val ReminderKey = booleanPreferencesKey("weekly_reminder_enabled")
+private val ExamsKey = stringPreferencesKey("exam_records")
 private const val REMINDER_WORK = "pregnancy-weekly-reminder"
 private const val REMINDER_CHANNEL = "pregnancy_reminders"
 
@@ -262,6 +263,10 @@ fun PregnancyApp(){
     var themeMode by remember{mutableStateOf("system")}
     var reminderEnabled by remember{mutableStateOf(false)}
     var themeDialog by remember{mutableStateOf(false)}
+    var exams by remember{mutableStateOf(emptyList<ExamRecord>())}
+    var examEditor by remember{mutableStateOf<ExamRecord?>(null)}
+    var examEditorOpen by remember{mutableStateOf(false)}
+    var examDetail by remember{mutableStateOf<ExamRecord?>(null)}
 
     LaunchedEffect(Unit){
         val saved=context.pregnancyStore.data.first()[DueKey]
@@ -271,10 +276,15 @@ fun PregnancyApp(){
         localUpdatedAt=snapshot.second
         themeMode=context.pregnancyStore.data.first()[ThemeKey] ?: "system"
         reminderEnabled=context.pregnancyStore.data.first()[ReminderKey] ?: false
+        exams=loadExamRecords(context.pregnancyStore.data.first()[ExamsKey])
         if(reminderEnabled) scheduleWeeklyReminder(context)
         driveEmail=DriveSync.connectedEmail(context)
         if(driveEmail!=null) syncStatus="اتصال به Google Drive فعال است"
         loaded=true
+    }
+
+    fun saveExams(){
+        scope.launch { context.pregnancyStore.edit { it[ExamsKey]=encodeExamRecords(exams) } }
     }
 
     fun saveLocal(){
@@ -431,7 +441,7 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";else->"تنظیمات"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته‌های بارداری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";else->"خانه"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}},
                         actions={IconButton({screen=3}){Icon(Icons.Default.Settings,null)}},
                         colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
@@ -471,6 +481,7 @@ fun PregnancyApp(){
                         onTheme={themeDialog=true},
                         pad=pad
                     )
+                    5->ExamsModern(records=exams,pregnancy=p,onAdd={examEditor=null;examEditorOpen=true},onEdit={examEditor=it;examEditorOpen=true},onDelete={record->exams=exams.filterNot{it.id==record.id};saveExams();examEditorOpen=false},onOpen={examDetail=it},pad=pad)
                 }
             }
         }
@@ -998,129 +1009,3 @@ fun SettingsModern(
                 Row(Modifier.fillMaxWidth().padding(17.dp),verticalAlignment=Alignment.CenterVertically){
                     Icon(Icons.Default.CloudDone,null,tint=RoseDark)
                     Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)){
-                        Text("وضعیت همگام‌سازی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
-                        Text(syncStatus,fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=3.dp))
-                    }
-                    TextButton(onClick=onConnect){Text("همگام‌سازی",fontFamily=Fa)}
-                }
-            }
-        }
-        item{
-            SettingTile(
-                if(reminderEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
-                "یادآوری هفتگی",
-                if(reminderEnabled) "یادآوری شروع هر هفته فعال است" else "شروع هفته جدید بارداری را یادآوری کن"
-            ){onReminder(!reminderEnabled)}
-        }
-        item{
-            SettingTile(
-                Icons.Default.Palette,
-                "ظاهر برنامه",
-                when(themeMode){"dark"->"حالت تاریک";"light"->"حالت روشن";else->"همگام با تنظیمات دستگاه"}
-            ){onTheme()}
-        }
-        item{
-            Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
-                Row(Modifier.padding(18.dp),verticalAlignment=Alignment.Top){
-                    Icon(Icons.Default.Info,null,tint=RoseDark)
-                    Spacer(Modifier.width(10.dp))
-                    Text("این برنامه آموزشی است و جایگزین تشخیص یا توصیه شخصی پزشک نیست. اطلاعات همگام‌شده در Google Drive متعلق به حساب Google شماست و فقط به حساب‌هایی که خودتان به اشتراک می‌گذارید دسترسی ویرایش می‌دهد.",fontFamily=Fa,fontSize=13.sp,lineHeight=21.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun DriveShareDialog(email:String,onEmail:(String)->Unit,onConfirm:()->Unit,onCancel:()->Unit){
-    AlertDialog(
-        onDismissRequest=onCancel,
-        icon={Icon(Icons.Default.PersonAdd,null,tint=RoseDark)},
-        title={Text("اشتراک‌گذاری پرونده بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold)},
-        text={
-            Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
-                Text("ایمیل Google همسر را وارد کن. او بعد از پذیرفتن دعوت می‌تواند همین پرونده را در نسخه خودش همگام کند.",fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)
-                OutlinedTextField(
-                    value=email,
-                    onValueChange=onEmail,
-                    singleLine=true,
-                    label={Text("ایمیل Google همسر",fontFamily=Fa)},
-                    placeholder={Text("example@gmail.com",fontFamily=Fa)},
-                    modifier=Modifier.fillMaxWidth(),
-                    shape=RoundedCornerShape(14.dp)
-                )
-            }
-        },
-        confirmButton={Button(onClick=onConfirm,enabled=email.contains("@")){Text("اشتراک‌گذاری",fontFamily=Fa)}},
-        dismissButton={TextButton(onClick=onCancel){Text("لغو",fontFamily=Fa)}}
-    )
-}
-
-@Composable
-fun ThemeChoiceDialog(current:String,onSelect:(String)->Unit,onCancel:()->Unit){
-    AlertDialog(
-        onDismissRequest=onCancel,
-        icon={Icon(Icons.Default.Palette,null,tint=RoseDark)},
-        title={Text("ظاهر برنامه",fontFamily=Fa,fontWeight=FontWeight.Bold)},
-        text={
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                listOf(
-                    "system" to "همگام با تنظیمات دستگاه",
-                    "light" to "حالت روشن",
-                    "dark" to "حالت تاریک"
-                ).forEach{(value,label)->
-                    Row(
-                        Modifier.fillMaxWidth().clickable{onSelect(value)}.padding(vertical=9.dp),
-                        verticalAlignment=Alignment.CenterVertically
-                    ){
-                        RadioButton(selected=current==value,onClick={onSelect(value)})
-                        Spacer(Modifier.width(8.dp))
-                        Text(label,fontFamily=Fa,fontSize=14.sp)
-                    }
-                }
-            }
-        },
-        confirmButton={TextButton(onClick=onCancel){Text("بستن",fontFamily=Fa)}}
-    )
-}
-
-@Composable
-fun SettingTile(icon:androidx.compose.ui.graphics.vector.ImageVector,title:String,subtitle:String,onClick:()->Unit){
-    Card(modifier=Modifier.fillMaxWidth().clickable{onClick()},shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=Color.White)){
-        Row(Modifier.padding(17.dp),verticalAlignment=Alignment.CenterVertically){
-            Surface(shape=RoundedCornerShape(14.dp),color=Blush,modifier=Modifier.size(46.dp)){
-                Box(contentAlignment=Alignment.Center){Icon(icon,null,tint=RoseDark)}
-            }
-            Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f)){
-                Text(title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
-                Text(subtitle,fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=3.dp))
-            }
-            Icon(Icons.Default.ChevronLeft,null,tint=MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-fun DateDialogModern(current:LocalDate,onOk:(LocalDate)->Unit,onCancel:()->Unit){
-    val context=androidx.compose.ui.platform.LocalContext.current
-    AlertDialog(
-        onDismissRequest=onCancel,
-        icon={Icon(Icons.Default.Event,null,tint=RoseDark)},
-        title={Text("تاریخ زایمان",fontFamily=Fa,fontWeight=FontWeight.Bold)},
-        text={
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                Text("تاریخ فعلی",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(jalali(current),fontFamily=Fa,fontSize=21.sp,fontWeight=FontWeight.Bold)
-                Text("تاریخ میلادی را انتخاب کنید؛ تاریخ شمسی و هفته بارداری خودکار محاسبه می‌شوند.",fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)
-            }
-        },
-        confirmButton={
-            TextButton(onClick={
-                DatePickerDialog(context,{_,y,m,d->onOk(LocalDate.of(y,m+1,d))},current.year,current.monthValue-1,current.dayOfMonth).show()
-            }){Text("انتخاب تاریخ",fontFamily=Fa)}
-        },
-        dismissButton={TextButton(onCancel){Text("لغو",fontFamily=Fa)}}
-    )
-}
