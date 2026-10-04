@@ -127,6 +127,7 @@ class MainActivity:ComponentActivity(){
     override fun onCreate(b:Bundle?){super.onCreate(b);enableEdgeToEdge();setContent{PregnancyApp()}}
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PregnancyApp(){
     var due by remember{mutableStateOf(LocalDate.of(2027,2,4))}
