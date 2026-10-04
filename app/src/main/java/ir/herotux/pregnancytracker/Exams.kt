@@ -618,7 +618,7 @@ fun ExamDetailDialog(
 
 
 @Composable
-private fun PersianDatePickerDialog(
+fun PersianDatePickerDialog(
     initialDate: LocalDate,
     onSelect: (LocalDate) -> Unit,
     onDismiss: () -> Unit
