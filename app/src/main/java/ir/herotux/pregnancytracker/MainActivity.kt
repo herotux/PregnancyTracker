@@ -931,7 +931,7 @@ fun CurrentWeekModern(
                 Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f), modifier = Modifier.size(64.dp)) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(${fa(safeWeek)}, fontFamily = Fa, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(fa(safeWeek), fontFamily = Fa, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                     Spacer(Modifier.width(14.dp))
