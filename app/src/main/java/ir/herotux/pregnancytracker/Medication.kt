@@ -101,7 +101,7 @@ class MedicationAlarmReceiver:BroadcastReceiver(){
         }}
     }
 }
-class MedicationBootReceiver:BroadcastReceiver(){override fun onReceive(context:Context,intent:Intent){if(intent.action==Intent.ACTION_BOOT_COMPLETED||intent.action=="android.intent.action.TIME_SET"||intent.action=="android.intent.action.TIMEZONE_CHANGED")kotlinx.coroutines.runBlocking{rescheduleAllMedicationAlarms(context,loadMedications(context))}}}
+class MedicationBootReceiver:BroadcastReceiver(){override fun onReceive(context:Context,intent:Intent){if(intent.action==Intent.ACTION_BOOT_COMPLETED||intent.action=="android.intent.action.TIME_SET"||intent.action=="android.intent.action.TIMEZONE_CHANGED"||intent.action==AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED)kotlinx.coroutines.runBlocking{rescheduleAllMedicationAlarms(context,loadMedications(context))}}}
 
 @Composable
 fun MedicationEditorDialog(initial:MedicationRecord?,onSave:(MedicationRecord)->Unit,onDelete:((MedicationRecord)->Unit)?,onCancel:()->Unit){
