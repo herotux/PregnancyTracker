@@ -373,11 +373,13 @@ fun ExamEditorDialog(
     }
 
     if (datePickerOpen) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         PersianDatePickerDialog(
             initialDate = date,
             onSelect = { date = it; datePickerOpen = false },
             onDismiss = { datePickerOpen = false }
         )
+        }
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
