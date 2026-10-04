@@ -19,6 +19,14 @@ jobs:
           gradle-version: "8.10.2"
       - name: Verify Gradle
         run: gradle --version
+      - name: Download Vazirmatn fonts
+        run: |
+          set -e
+          mkdir -p app/src/main/res/font
+          base="https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf"
+          for weight in Thin ExtraLight Light Regular Medium SemiBold Bold ExtraBold Black; do
+            curl -fsSL "$base/Vazirmatn-$weight.ttf" -o "app/src/main/res/font/vazirmatn_$(echo "$weight" | tr '[:upper:]' '[:lower:]').ttf"
+          done
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace --no-daemon
       - uses: actions/upload-artifact@v4
