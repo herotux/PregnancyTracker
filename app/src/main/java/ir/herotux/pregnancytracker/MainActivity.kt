@@ -1,6 +1,7 @@
 package ir.herotux.pregnancytracker
 
 import android.os.Bundle
+import android.app.DatePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,11 +25,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 
 private val Fa = FontFamily.SansSerif
+private val android.content.Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
+private val DueKey = stringPreferencesKey("due_date")
+
 private val months = listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
 
 private fun fa(s:String)=s.map{if(it in '0'..'9') ('۰'.code+it.code-'0'.code).toChar() else it}.joinToString("")
@@ -142,7 +151,15 @@ private val AmberSoft = Color(0xFFFFF1D8)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PregnancyApp(){
+    val context=androidx.compose.ui.platform.LocalContext.current
+    val scope=rememberCoroutineScope()
     var due by remember{mutableStateOf(LocalDate.of(2027,2,4))}
+    var loaded by remember{mutableStateOf(false)}
+    LaunchedEffect(Unit){
+        val saved=context.pregnancyStore.data.first()[DueKey]
+        if(saved!=null) runCatching{due=LocalDate.parse(saved)}
+        loaded=true
+    }
     var screen by remember{mutableIntStateOf(0)}
     var note by remember{mutableStateOf("")}
     var notes by remember{mutableStateOf(emptyList<String>())}
@@ -163,6 +180,7 @@ fun PregnancyApp(){
         surfaceVariant=Color(0xFFF5ECEF)
     )
 
+    if(!loaded) return
     MaterialTheme(colorScheme=colors){
         CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl){
             Scaffold(
@@ -223,7 +241,11 @@ fun PregnancyApp(){
             }
         }
     }
-    if(dateDialog) DateDialogModern(due,{due=it;dateDialog=false},{dateDialog=false})
+    if(dateDialog) DateDialogModern(due,{newDue->
+        due=newDue
+        scope.launch{context.pregnancyStore.edit{it[DueKey]=newDue.toString()}}
+        dateDialog=false
+    },{dateDialog=false})
     selectedWeek?.let{WeekDialogModern(weeklyPlan(it)){selectedWeek=null}}
 }
 
@@ -633,6 +655,7 @@ fun SettingTile(icon:androidx.compose.ui.graphics.vector.ImageVector,title:Strin
 
 @Composable
 fun DateDialogModern(current:LocalDate,onOk:(LocalDate)->Unit,onCancel:()->Unit){
+    val context=androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
         onDismissRequest=onCancel,
         icon={Icon(Icons.Default.Event,null,tint=RoseDark)},
@@ -641,10 +664,14 @@ fun DateDialogModern(current:LocalDate,onOk:(LocalDate)->Unit,onCancel:()->Unit)
             Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
                 Text("تاریخ فعلی",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(jalali(current),fontFamily=Fa,fontSize=21.sp,fontWeight=FontWeight.Bold)
-                Text("نسخه فعلی با تاریخ نمونه شروع می‌شود؛ انتخاب‌گر واقعی تاریخ را در مرحله بعد اضافه می‌کنیم.",fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)
+                Text("تاریخ میلادی را انتخاب کنید؛ تاریخ شمسی و هفته بارداری خودکار محاسبه می‌شوند.",fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)
             }
         },
-        confirmButton={TextButton({onOk(current)}){Text("تأیید",fontFamily=Fa)}},
+        confirmButton={
+            TextButton(onClick={
+                DatePickerDialog(context,{_,y,m,d->onOk(LocalDate.of(y,m+1,d))},current.year,current.monthValue-1,current.dayOfMonth).show()
+            }){Text("انتخاب تاریخ",fontFamily=Fa)}
+        },
         dismissButton={TextButton(onCancel){Text("لغو",fontFamily=Fa)}}
     )
 }
