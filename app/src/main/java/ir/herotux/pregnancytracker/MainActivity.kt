@@ -457,7 +457,7 @@ fun WeeksModern(current:Int,pad:PaddingValues,onWeek:(Int)->Unit){
                 colors=CardDefaults.cardColors(containerColor=if(w==current)Blush else Color.White)
             ){
                 Row(Modifier.padding(15.dp),verticalAlignment=Alignment.CenterVertically){
-                    Surface(shape=RoundedCornerShape(16.dp),color=trimesterColors[(w-1)/14.coerceAtMost(2)],modifier=Modifier.size(52.dp)){
+                    Surface(shape=RoundedCornerShape(16.dp),color=trimesterColors[((w-1)/14).coerceAtMost(2)],modifier=Modifier.size(52.dp)){
                         Box(contentAlignment=Alignment.Center){Text(fa(w),fontFamily=Fa,fontSize=21.sp,fontWeight=FontWeight.Bold,color=RoseDark)}
                     }
                     Spacer(Modifier.width(13.dp))
