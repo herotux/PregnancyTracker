@@ -502,6 +502,31 @@ fun PregnancyApp(){
         onCancel={themeDialog=false}
     )
 
+    if(examEditorOpen) ExamEditorDialog(
+        initial=examEditor,
+        onSave={record->
+            exams=(exams.filterNot{it.id==record.id}+record).sortedByDescending{it.date}
+            saveExams()
+            examEditorOpen=false
+            examEditor=null
+        },
+        onDelete={record->
+            exams=exams.filterNot{it.id==record.id}
+            saveExams()
+            examEditorOpen=false
+            examEditor=null
+        },
+        onCancel={examEditorOpen=false;examEditor=null}
+    )
+
+    examDetail?.let{record->
+        ExamDetailDialog(record,pregnancy=p,onEdit={
+            examDetail=null
+            examEditor=record
+            examEditorOpen=true
+        },onClose={examDetail=null})
+    }
+
     if(shareDialog) DriveShareDialog(
         email=partnerEmail,
         onEmail={partnerEmail=it},
@@ -998,19 +1023,3 @@ fun SettingsModern(
     pad:PaddingValues
 ){
     LazyColumn(
-        Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),
-        verticalArrangement=Arrangement.spacedBy(12.dp),
-        contentPadding=PaddingValues(top=8.dp,bottom=28.dp)
-    ){
-        item{
-            Text("تنظیمات",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold)
-            Text("اطلاعات بارداری، همگام‌سازی و ظاهر برنامه را مدیریت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
-        }
-        item{SettingTile(Icons.Default.Event,"تاریخ زایمان","تاریخ فعلی: "+jalali(due)){onDue(due)}}
-        item{SettingTile(Icons.Default.Language,"تقویم","نمایش همزمان تاریخ شمسی و میلادی"){}}
-        item{
-            SettingTile(
-                Icons.Default.CloudSync,
-                "همگام‌سازی Google Drive",
-                driveEmail?.let{"حساب متصل: $it"} ?: "پشتیبان‌گیری و همگام‌سازی خودکار اطلاعات"
-            ){onConnect()}
