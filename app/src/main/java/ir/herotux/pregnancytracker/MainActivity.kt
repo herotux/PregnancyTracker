@@ -1,6 +1,12 @@
 package ir.herotux.pregnancytracker
 
 import android.os.Bundle
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.pm.PackageManager
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import android.app.Activity
 import android.content.Context
 import androidx.activity.result.IntentSenderRequest
@@ -30,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -41,10 +48,27 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import kotlin.math.roundToInt
+import java.util.concurrent.TimeUnit
+import androidx.work.CoroutineWorker
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
 
-private val Fa = FontFamily.SansSerif
+private val Fa = FontFamily(
+    Font(R.font.vazirmatn_regular, FontWeight.Normal),
+    Font(R.font.vazirmatn_medium, FontWeight.Medium),
+    Font(R.font.vazirmatn_semibold, FontWeight.SemiBold),
+    Font(R.font.vazirmatn_bold, FontWeight.Bold),
+    Font(R.font.vazirmatn_extrabold, FontWeight.ExtraBold),
+    Font(R.font.vazirmatn_black, FontWeight.Black)
+)
 private val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
 private val DueKey = stringPreferencesKey("due_date")
+private val ThemeKey = stringPreferencesKey("theme_mode")
+private val ReminderKey = booleanPreferencesKey("weekly_reminder_enabled")
+private const val REMINDER_WORK = "pregnancy-weekly-reminder"
+private const val REMINDER_CHANNEL = "pregnancy_reminders"
 
 private val months = listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
 
@@ -141,6 +165,63 @@ private fun weeklyPlan(w:Int):WeekPlan{
 }
 
 
+private fun ensureReminderChannel(context: Context) {
+    if (android.os.Build.VERSION.SDK_INT >= 26) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(
+                REMINDER_CHANNEL,
+                "یادآوری‌های بارداری",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "یادآوری شروع هفته جدید بارداری"
+            }
+        )
+    }
+}
+
+private fun scheduleWeeklyReminder(context: Context) {
+    ensureReminderChannel(context)
+    val request = PeriodicWorkRequestBuilder<WeeklyReminderWorker>(7, TimeUnit.DAYS)
+        .setInitialDelay(7, TimeUnit.DAYS)
+        .build()
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        REMINDER_WORK,
+        ExistingPeriodicWorkPolicy.UPDATE,
+        request
+    )
+}
+
+private fun cancelWeeklyReminder(context: Context) {
+    WorkManager.getInstance(context).cancelUniqueWork(REMINDER_WORK)
+}
+
+class WeeklyReminderWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
+    override suspend fun doWork(): Result {
+        val due = applicationContext.pregnancyStore.data.first()[DueKey]
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?: LocalDate.of(2027, 2, 4)
+        val days = ChronoUnit.DAYS.between(due.minusDays(280), LocalDate.now()).coerceIn(0, 280)
+        val week = (days / 7).toInt().coerceIn(1, 40)
+
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return Result.success()
+
+        ensureReminderChannel(applicationContext)
+        val notification = NotificationCompat.Builder(applicationContext, REMINDER_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("هفته ${fa(week)} بارداری شروع شد")
+            .setContentText("برنامه، توصیه‌ها و بررسی‌های هفته ${fa(week)} را مرور کن.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("هفته ${fa(week)} شروع شده است. برنامه هفتگی و علائم هشدار را در ردیاب بارداری مرور کن."))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+        androidx.core.app.NotificationManagerCompat.from(applicationContext).notify(week, notification)
+        return Result.success()
+    }
+}
+
 class MainActivity:ComponentActivity(){
     override fun onCreate(b:Bundle?){
         super.onCreate(b)
@@ -175,6 +256,9 @@ fun PregnancyApp(){
     var partnerEmail by remember{mutableStateOf("")}
     var pendingAction by remember{mutableStateOf("sync")}
     var localUpdatedAt by remember{mutableLongStateOf(0L)}
+    var themeMode by remember{mutableStateOf("system")}
+    var reminderEnabled by remember{mutableStateOf(false)}
+    var themeDialog by remember{mutableStateOf(false)}
 
     LaunchedEffect(Unit){
         val saved=context.pregnancyStore.data.first()[DueKey]
@@ -182,6 +266,9 @@ fun PregnancyApp(){
         val snapshot=DriveSync.readLocalSnapshot(context)
         if(snapshot.first.isNotEmpty()) notes=snapshot.first
         localUpdatedAt=snapshot.second
+        themeMode=context.pregnancyStore.data.first()[ThemeKey] ?: "system"
+        reminderEnabled=context.pregnancyStore.data.first()[ReminderKey] ?: false
+        if(reminderEnabled) scheduleWeeklyReminder(context)
         driveEmail=DriveSync.connectedEmail(context)
         if(driveEmail!=null) syncStatus="اتصال به Google Drive فعال است"
         loaded=true
@@ -203,6 +290,43 @@ fun PregnancyApp(){
             context.pregnancyStore.edit{it[DueKey]=due.toString()}
             DriveSync.saveLocalSnapshot(context,due,notes,localUpdatedAt)
         }
+    }
+
+    val notificationPermissionLauncher=rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ){granted->
+        if(granted){
+            reminderEnabled=true
+            scope.launch{
+                context.pregnancyStore.edit{it[ReminderKey]=true}
+                scheduleWeeklyReminder(context)
+            }
+        }else{
+            reminderEnabled=false
+        }
+    }
+
+    fun setWeeklyReminder(enabled:Boolean){
+        if(!enabled){
+            reminderEnabled=false
+            cancelWeeklyReminder(context)
+            scope.launch{context.pregnancyStore.edit{it[ReminderKey]=false}}
+            return
+        }
+        if(android.os.Build.VERSION.SDK_INT>=33 &&
+            ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED
+        ){
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }else{
+            reminderEnabled=true
+            scheduleWeeklyReminder(context)
+            scope.launch{context.pregnancyStore.edit{it[ReminderKey]=true}}
+        }
+    }
+
+    fun saveTheme(mode:String){
+        themeMode=mode
+        scope.launch{context.pregnancyStore.edit{it[ThemeKey]=mode}}
     }
 
     val authLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()){result->
@@ -284,7 +408,16 @@ fun PregnancyApp(){
     val p=Pregnancy(due)
     val now=LocalDate.now()
     val age=p.age(now)
-    val colors=lightColorScheme(
+    val darkTheme=when(themeMode){
+        "dark"->true
+        "light"->false
+        else->androidx.compose.foundation.isSystemInDarkTheme()
+    }
+    val colors=if(darkTheme) darkColorScheme(
+        primary=Color(0xFFFFB0C8),onPrimary=Color(0xFF5A1830),primaryContainer=Color(0xFF7A2947),
+        onPrimaryContainer=Color(0xFFFFD9E2),secondary=Color(0xFFE7BFCB),
+        background=Color(0xFF171114),surface=Color(0xFF21191C),surfaceVariant=Color(0xFF302428)
+    ) else lightColorScheme(
         primary=RoseDark,onPrimary=Color.White,primaryContainer=Blush,onPrimaryContainer=RoseDark,
         secondary=Color(0xFF6D5A63),background=Cream,surface=Cream,surfaceVariant=Color(0xFFF5ECEF)
     )
@@ -302,7 +435,7 @@ fun PregnancyApp(){
                     )
                 },
                 bottomBar={
-                    NavigationBar(containerColor=Color.White,tonalElevation=3.dp){
+                    NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=3.dp){
                         listOf("خانه" to Icons.Default.Home,"هفته‌ها" to Icons.Default.CalendarMonth,"یادداشت‌ها" to Icons.Default.NoteAlt,"تنظیمات" to Icons.Default.Settings)
                             .forEachIndexed{i,(label,icon)->
                                 NavigationBarItem(selected=screen==i,onClick={screen=i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
@@ -344,6 +477,12 @@ fun PregnancyApp(){
 
     selectedWeek?.let{WeekDialogModern(weeklyPlan(it)){selectedWeek=null}}
 
+    if(themeDialog) ThemeChoiceDialog(
+        current=themeMode,
+        onSelect={saveTheme(it); themeDialog=false},
+        onCancel={themeDialog=false}
+    )
+
     if(shareDialog) DriveShareDialog(
         email=partnerEmail,
         onEmail={partnerEmail=it},
@@ -384,7 +523,7 @@ fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onW
             Card(
                 modifier=Modifier.fillMaxWidth().clickable{onWeek(week)},
                 shape=RoundedCornerShape(24.dp),
-                colors=CardDefaults.cardColors(containerColor=Color.White),
+                colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),
                 elevation=CardDefaults.cardElevation(defaultElevation=2.dp)
             ){
                 Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
@@ -724,6 +863,10 @@ fun SettingsModern(
     syncStatus:String,
     onConnect:()->Unit,
     onShare:()->Unit,
+    reminderEnabled:Boolean,
+    onReminder:(Boolean)->Unit,
+    themeMode:String,
+    onTheme:()->Unit,
     pad:PaddingValues
 ){
     LazyColumn(
@@ -762,8 +905,20 @@ fun SettingsModern(
                 }
             }
         }
-        item{SettingTile(Icons.Default.NotificationsNone,"یادآوری‌ها","یادآوری ویزیت، آزمایش و شروع هر هفته"){}}
-        item{SettingTile(Icons.Default.Palette,"ظاهر برنامه","طراحی فارسی، RTL و Material 3"){}}
+        item{
+            SettingTile(
+                if(reminderEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                "یادآوری هفتگی",
+                if(reminderEnabled) "یادآوری شروع هر هفته فعال است" else "شروع هفته جدید بارداری را یادآوری کن"
+            ){onReminder(!reminderEnabled)}
+        }
+        item{
+            SettingTile(
+                Icons.Default.Palette,
+                "ظاهر برنامه",
+                when(themeMode){"dark"->"حالت تاریک";"light"->"حالت روشن";else->"همگام با تنظیمات دستگاه"}
+            ){onTheme()}
+        }
         item{
             Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
                 Row(Modifier.padding(18.dp),verticalAlignment=Alignment.Top){
@@ -798,6 +953,34 @@ fun DriveShareDialog(email:String,onEmail:(String)->Unit,onConfirm:()->Unit,onCa
         },
         confirmButton={Button(onClick=onConfirm,enabled=email.contains("@")){Text("اشتراک‌گذاری",fontFamily=Fa)}},
         dismissButton={TextButton(onClick=onCancel){Text("لغو",fontFamily=Fa)}}
+    )
+}
+
+@Composable
+fun ThemeChoiceDialog(current:String,onSelect:(String)->Unit,onCancel:()->Unit){
+    AlertDialog(
+        onDismissRequest=onCancel,
+        icon={Icon(Icons.Default.Palette,null,tint=RoseDark)},
+        title={Text("ظاهر برنامه",fontFamily=Fa,fontWeight=FontWeight.Bold)},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                listOf(
+                    "system" to "همگام با تنظیمات دستگاه",
+                    "light" to "حالت روشن",
+                    "dark" to "حالت تاریک"
+                ).forEach{(value,label)->
+                    Row(
+                        Modifier.fillMaxWidth().clickable{onSelect(value)}.padding(vertical=9.dp),
+                        verticalAlignment=Alignment.CenterVertically
+                    ){
+                        RadioButton(selected=current==value,onClick={onSelect(value)})
+                        Spacer(Modifier.width(8.dp))
+                        Text(label,fontFamily=Fa,fontSize=14.sp)
+                    }
+                }
+            }
+        },
+        confirmButton={TextButton(onClick=onCancel){Text("بستن",fontFamily=Fa)}}
     )
 }
 
