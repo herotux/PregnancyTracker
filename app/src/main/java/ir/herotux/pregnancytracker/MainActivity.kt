@@ -804,7 +804,7 @@ fun CalendarModern(
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween,modifier=Modifier.fillMaxWidth()){
                         IconButton(onClick={onMonth(month.minusMonths(1))}){Icon(Icons.Default.ChevronRight,null)}
                         Column(horizontalAlignment=Alignment.CenterHorizontally){
-                            Text("\${fa(month.monthValue)} / \${fa(month.year)}",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp)
+                            Text("${fa(month.monthValue)} / ${fa(month.year)}",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp)
                             Text("ماه میلادی",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick={onMonth(month.plusMonths(1))}){Icon(Icons.Default.ChevronLeft,null)}
@@ -847,7 +847,7 @@ fun CalendarModern(
                     Text(selected.toString(),fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     if(inPregnancy){
-                        Text("هفته \${fa(selectedAge.first)}، روز \${fa(selectedAge.second)} بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
+                        Text("هفته ${fa(selectedAge.first)}، روز ${fa(selectedAge.second)} بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
                         Text(if(selected==due)"این تاریخ، موعد تقریبی زایمان است." else if(selected<today)"این تاریخ در گذشته است." else "این تاریخ در بازه بارداری قرار دارد.",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=3.dp))
                     }else{
                         Text(if(selected<pregnancy.lmp)"این تاریخ پیش از شروع محاسبات بارداری است." else "این تاریخ بعد از موعد تقریبی زایمان است.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
