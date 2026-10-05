@@ -247,8 +247,9 @@ fun PregnancyApp(){
     val context=androidx.compose.ui.platform.LocalContext.current
     val activity=context as Activity
     val scope=rememberCoroutineScope()
-    var due by remember{mutableStateOf(LocalDate.of(2027,2,4))}
+    var due by remember{mutableStateOf(LocalDate.now())}
     var loaded by remember{mutableStateOf(false)}
+    var hasProfile by remember{mutableStateOf(false)}
     var screen by remember{mutableIntStateOf(0)}
     var calendarMonth by remember{mutableStateOf(LocalDate.now().withDayOfMonth(1))}
     var selectedDate by remember{mutableStateOf(LocalDate.now())}
@@ -276,7 +277,7 @@ fun PregnancyApp(){
 
     LaunchedEffect(Unit){
         val saved=context.pregnancyStore.data.first()[DueKey]
-        if(saved!=null) runCatching{due=LocalDate.parse(saved)}
+        if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true}
         val snapshot=DriveSync.readLocalSnapshot(context)
         if(snapshot.first.isNotEmpty()) notes=snapshot.first
         localUpdatedAt=snapshot.second
@@ -426,6 +427,38 @@ fun PregnancyApp(){
     }
 
     if(!loaded) return
+
+    if(!hasProfile){
+        val dark=androidx.compose.foundation.isSystemInDarkTheme()
+        val colors=if(dark) darkColorScheme(primary=Color(0xFFFFB0C8),primaryContainer=Color(0xFF7A2947)) else lightColorScheme(primary=RoseDark,primaryContainer=Blush)
+        MaterialTheme(colorScheme=colors){
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl){
+                Scaffold(containerColor=MaterialTheme.colorScheme.background){ pad ->
+                    Column(
+                        Modifier.fillMaxSize().padding(pad).padding(horizontal=22.dp),
+                        horizontalAlignment=Alignment.CenterHorizontally,
+                        verticalArrangement=Arrangement.Center
+                    ){
+                        Surface(shape=CircleShape,color=Blush,modifier=Modifier.size(104.dp)){
+                            Box(contentAlignment=Alignment.Center){Icon(Icons.Default.ChildCare,null,tint=RoseDark,modifier=Modifier.size(58.dp))}
+                        }
+                        Text("به نونو خوش آمدی",fontFamily=Fa,fontSize=28.sp,fontWeight=FontWeight.ExtraBold,modifier=Modifier.padding(top=18.dp))
+                        Text("برای شروع، تاریخ زایمان را وارد کن تا هفته و روز بارداری دقیقاً از همان تاریخ محاسبه شود.",fontFamily=Fa,fontSize=14.sp,lineHeight=23.sp,textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=8.dp))
+                        Button(onClick={dateDialog=true},modifier=Modifier.fillMaxWidth().padding(top=24.dp),shape=RoundedCornerShape(16.dp)){
+                            Icon(Icons.Default.Event,null); Spacer(Modifier.width(8.dp)); Text("انتخاب تاریخ زایمان",fontFamily=Fa)
+                        }
+                    }
+                }
+            }
+        }
+        if(dateDialog) DateDialogModern(due,{newDue->
+            due=newDue
+            hasProfile=true
+            saveLocal()
+            dateDialog=false
+        },{dateDialog=false})
+        return
+    }
 
     val p=Pregnancy(due)
     val now=LocalDate.now()
