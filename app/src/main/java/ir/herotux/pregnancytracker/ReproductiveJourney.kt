@@ -70,7 +70,8 @@ internal fun ReproductiveJourneyScreen(
     onContinuePregnancy: () -> Unit,
     onBack: () -> Unit
 ) {
-    val pregnant = stage in listOf(STAGE_POSSIBLE, STAGE_POSITIVE, STAGE_PREGNANT)
+    val possible = stage == STAGE_POSSIBLE
+    val pregnant = stage in listOf(STAGE_POSITIVE, STAGE_PREGNANT)
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -86,7 +87,7 @@ internal fun ReproductiveJourneyScreen(
                 modifier = Modifier.padding(top = 5.dp, bottom = 8.dp)
             )
         }
-        if (!pregnant) {
+        if (!pregnant && !possible) {
             item { Text("الان در کدام مرحله هستی؟", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
             item { JourneyOption("در حال برنامه‌ریزی برای بارداری", "آمادگی پیش از بارداری و نکات مهم", Icons.Default.Favorite, stage == STAGE_PLANNING) { onStage(STAGE_PLANNING) } }
             item { JourneyOption("فقط می‌خواهم چرخه قاعدگی را ثبت کنم", "ثبت قاعدگی و مشاهده پیش‌بینی چرخه", Icons.Default.CalendarMonth, stage == STAGE_CYCLE) { onStage(STAGE_CYCLE) } }
@@ -102,6 +103,20 @@ internal fun ReproductiveJourneyScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     shape = RoundedCornerShape(15.dp)
                 ) { Text("ادامه", fontFamily = Fa, fontWeight = FontWeight.Bold) }
+            }
+        } else if (possible) {
+            item {
+                Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Blush)) {
+                    Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                        Text("احتمال بارداری هنوز به معنی بارداری تأییدشده نیست", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = RoseDark)
+                        Text("تاریخ قاعدگی یا علائم به‌تنهایی بارداری را ثابت نمی‌کنند. می‌توانی تاریخ تست را ثبت کنی و پس از نتیجه مثبت، سن بارداری را با روش معتبر تعیین کنی.", fontFamily = Fa, fontSize = 12.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 7.dp))
+                    }
+                }
+            }
+            item {
+                Button(onClick = onContinuePregnancy, modifier = Modifier.fillMaxWidth()) {
+                    Text("ادامه بدون تاریخ‌گذاری تا زمان تأیید", fontFamily = Fa)
+                }
             }
         } else {
             item {
@@ -275,11 +290,16 @@ internal fun CycleModeScreen(
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text("پیش‌بینی چرخه بعدی", fontFamily = Fa, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    CyclePredictionRow("قاعدگی بعدی (تخمینی)", nextPeriod?.let(::jalali) ?: "پس از ثبت قاعدگی")
-                    CyclePredictionRow("تخمک‌گذاری (تخمینی)", ovulation?.let(::jalali) ?: "پس از ثبت قاعدگی")
-                    CyclePredictionRow("شروع پنجره باروری", fertileStart?.let(::jalali) ?: "پس از ثبت قاعدگی")
-                    Text("پنجره باروری معمولاً شامل پنج روز پیش از تخمک‌گذاری و روز تخمک‌گذاری است؛ زمان واقعی می‌تواند جابه‌جا شود.", fontFamily = Fa, fontSize = 11.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (stage == STAGE_POSTPARTUM) {
+                        Text("پیگیری پس از زایمان", fontFamily = Fa, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("این بخش برای پیگیری مراقبت‌های مادر، علائم جسمی و روانی، شیردهی و زمان بازگشت چرخه طراحی می‌شود. در صورت علائم نگران‌کننده، پیگیری پزشکی را به تعویق نینداز.", fontFamily = Fa, fontSize = 12.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text("پیش‌بینی چرخه بعدی", fontFamily = Fa, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        CyclePredictionRow("قاعدگی بعدی (تخمینی)", nextPeriod?.let(::jalali) ?: "پس از ثبت قاعدگی")
+                        CyclePredictionRow("تخمک‌گذاری (تخمینی)", ovulation?.let(::jalali) ?: "پس از ثبت قاعدگی")
+                        CyclePredictionRow("شروع پنجره باروری", fertileStart?.let(::jalali) ?: "پس از ثبت قاعدگی")
+                        Text("پنجره باروری معمولاً شامل پنج روز پیش از تخمک‌گذاری و روز تخمک‌گذاری است؛ زمان واقعی می‌تواند جابه‌جا شود.", fontFamily = Fa, fontSize = 11.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
