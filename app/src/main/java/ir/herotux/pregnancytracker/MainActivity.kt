@@ -685,7 +685,16 @@ fun PregnancyApp(){
                     3->CalendarModern(due, calendarMonth, {calendarMonth=it}, selectedDate, {selectedDate=it}, {dateDialog=true}, pad)
                     4->SettingsModern(
                         due=due,
-                        onDue={newDue->due=newDue;saveLocal()},
+                        onDue={newDue->
+                            due=newDue
+                            saveLocal()
+                            familyId?.let{id->
+                                scope.launch{
+                                    runCatching{FamilyCloud.updateDueDate(id,newDue)}
+                                        .onFailure{syncStatus="ذخیره تاریخ روی گوشی انجام شد، اما همگام‌سازی پرونده خانواده ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+                                }
+                            }
+                        },
                         driveEmail=driveEmail,
                         firebaseEmail=firebaseEmail,
                         userRole=userRole ?: "mother",
