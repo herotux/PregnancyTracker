@@ -49,6 +49,10 @@ import java.time.temporal.ChronoUnit
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
 import androidx.work.CoroutineWorker
@@ -260,6 +264,7 @@ fun PregnancyApp(){
     var dateDialog by remember{mutableStateOf(false)}
     var selectedWeek by remember{mutableStateOf<Int?>(null)}
     var driveEmail by remember{mutableStateOf<String?>(null)}
+    var firebaseEmail by remember{mutableStateOf(FirebaseAuth.getInstance().currentUser?.email)}
     var syncStatus by remember{mutableStateOf("همگام‌سازی غیرفعال است")}
     var shareDialog by remember{mutableStateOf(false)}
     var partnerEmail by remember{mutableStateOf("")}
@@ -358,6 +363,31 @@ fun PregnancyApp(){
     fun saveTheme(mode:String){
         themeMode=mode
         scope.launch{context.pregnancyStore.edit{it[ThemeKey]=mode}}
+    }
+
+    val firebaseSignInLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
+        if(result.resultCode==Activity.RESULT_OK && result.data!=null){
+            runCatching{GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(com.google.android.gms.common.api.ApiException::class.java)}
+                .onSuccess{account->
+                    val token=account.idToken
+                    if(token.isNullOrBlank()) syncStatus="توکن ورود Google دریافت نشد؛ SHA-1 و OAuth را بررسی کن"
+                    else FirebaseAuth.getInstance().signInWithCredential(GoogleAuthProvider.getCredential(token,null))
+                        .addOnSuccessListener{authResult->
+                            firebaseEmail=authResult.user?.email
+                            syncStatus="ورود Firebase با Gmail انجام شد؛ همگام‌سازی ابری هنوز نیازمند تکمیل است"
+                        }
+                        .addOnFailureListener{syncStatus="ورود Firebase ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+                }
+                .onFailure{syncStatus="ورود Google ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+        }else syncStatus="ورود Google لغو شد"
+    }
+
+    fun signInFirebaseWithGoogle(){
+        val options=GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestIdToken(context.getString(R.string.default_web_client_id))
+            .build()
+        firebaseSignInLauncher.launch(GoogleSignIn.getClient(activity,options).signInIntent)
     }
 
     val authLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()){result->
@@ -542,6 +572,9 @@ fun PregnancyApp(){
                         due=due,
                         onDue={newDue->due=newDue;saveLocal()},
                         driveEmail=driveEmail,
+                        firebaseEmail=firebaseEmail,
+                        onFirebaseSignIn={signInFirebaseWithGoogle()},
+                        onFirebaseSignOut={FirebaseAuth.getInstance().signOut();GoogleSignIn.getClient(activity,GoogleSignInOptions.DEFAULT_SIGN_IN).signOut();firebaseEmail=null;syncStatus="از حساب Firebase خارج شدی"},
                         syncStatus=syncStatus,
                         onConnect={authorizeDrive("sync")},
                         onShare={shareDialog=true},
@@ -1418,6 +1451,9 @@ fun SettingsModern(
     due:LocalDate,
     onDue:(LocalDate)->Unit,
     driveEmail:String?,
+    firebaseEmail:String?,
+    onFirebaseSignIn:()->Unit,
+    onFirebaseSignOut:()->Unit,
     syncStatus:String,
     onConnect:()->Unit,
     onShare:()->Unit,
@@ -1438,6 +1474,13 @@ fun SettingsModern(
             Text("اطلاعات بارداری، همگام‌سازی و ظاهر برنامه را مدیریت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
         }
         item{SettingTile(Icons.Default.Event,"تاریخ زایمان","تاریخ فعلی: "+jalali(due)){onDue(due)}}
+        item{
+            SettingTile(
+                if(firebaseEmail==null) Icons.Default.Login else Icons.Default.AccountCircle,
+                if(firebaseEmail==null) "ورود و همگام‌سازی با Gmail" else "حساب Firebase متصل",
+                firebaseEmail ?: "ورود امن با حساب Google برای همگام‌سازی بین دستگاه‌ها"
+            ){if(firebaseEmail==null) onFirebaseSignIn() else onFirebaseSignOut()}
+        }
         item{SettingTile(Icons.Default.Language,"تقویم","تقویم و تاریخ‌ها به‌صورت شمسی"){}}
         item{
             SettingTile(
