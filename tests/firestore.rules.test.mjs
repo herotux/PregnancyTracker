@@ -300,3 +300,53 @@ test("a user cannot send a message pretending to be another participant", async 
     createdAt: new Date(),
   }));
 });
+
+
+test("users can submit and read only their own issue reports", async () => {
+  const ownerDb = env.authenticatedContext("report-owner").firestore();
+  const report = {
+    uid: "report-owner",
+    title: "مشکل باز شدن تقویم",
+    category: "bug",
+    description: "وقتی تقویم را باز می‌کنم صفحه بسته می‌شود.",
+    appVersion: "1.0.0",
+    versionCode: 1,
+    androidVersion: "16",
+    device: "Samsung Galaxy",
+    status: "new",
+    createdAt: new Date(),
+  };
+  await assertSucceeds(setDoc(doc(ownerDb, "issueReports/report-1"), report));
+  await assertSucceeds(getDoc(doc(ownerDb, "issueReports/report-1")));
+  const otherDb = env.authenticatedContext("report-other").firestore();
+  await assertFails(getDoc(doc(otherDb, "issueReports/report-1")));
+  await assertFails(updateDoc(doc(ownerDb, "issueReports/report-1"), { status: "resolved" }));
+});
+
+test("users cannot submit issue reports on behalf of another account or forge review status", async () => {
+  const db = env.authenticatedContext("report-owner").firestore();
+  await assertFails(setDoc(doc(db, "issueReports/forged-owner"), {
+    uid: "someone-else",
+    title: "عنوان مشکل",
+    category: "bug",
+    description: "شرح کافی برای گزارش مشکل آزمایشی",
+    appVersion: "1.0.0",
+    versionCode: 1,
+    androidVersion: "16",
+    device: "Android",
+    status: "new",
+    createdAt: new Date(),
+  }));
+  await assertFails(setDoc(doc(db, "issueReports/forged-status"), {
+    uid: "report-owner",
+    title: "عنوان مشکل",
+    category: "bug",
+    description: "شرح کافی برای گزارش مشکل آزمایشی",
+    appVersion: "1.0.0",
+    versionCode: 1,
+    androidVersion: "16",
+    device: "Android",
+    status: "resolved",
+    createdAt: new Date(),
+  }));
+});
