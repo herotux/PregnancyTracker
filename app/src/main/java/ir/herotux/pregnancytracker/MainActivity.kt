@@ -79,6 +79,9 @@ private val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_set
 private val DueKey = stringPreferencesKey("due_date")
 private val ThemeKey = stringPreferencesKey("theme_mode")
 private val ReminderKey = booleanPreferencesKey("weekly_reminder_enabled")
+private val UserRoleKey = stringPreferencesKey("user_role")
+private val FamilyIdKey = stringPreferencesKey("family_id")
+private val FamilyInviteCodeKey = stringPreferencesKey("family_invite_code")
 private val ExamsKey = stringPreferencesKey("exam_records")
 private val BabyNamesKey = stringPreferencesKey("baby_name_lists")
 private const val REMINDER_WORK = "pregnancy-weekly-reminder"
@@ -272,6 +275,15 @@ fun PregnancyApp(){
     var selectedWeek by remember{mutableStateOf<Int?>(null)}
     var driveEmail by remember{mutableStateOf<String?>(null)}
     var firebaseEmail by remember{mutableStateOf(FirebaseAuth.getInstance().currentUser?.email)}
+    var userRole by remember{mutableStateOf<String?>(null)}
+    var familyId by remember{mutableStateOf<String?>(null)}
+    var familyInviteCode by remember{mutableStateOf<String?>(null)}
+    var onboardingStage by remember{mutableStateOf("welcome")}
+    var inviteCodeInput by remember{mutableStateOf("")}
+    var onboardingBusy by remember{mutableStateOf(false)}
+    var onboardingError by remember{mutableStateOf<String?>(null)}
+    var authBusy by remember{mutableStateOf(false)}
+    var authError by remember{mutableStateOf<String?>(null)}
     var syncStatus by remember{mutableStateOf("همگام‌سازی غیرفعال است")}
     var shareDialog by remember{mutableStateOf(false)}
     var partnerEmail by remember{mutableStateOf("")}
@@ -304,6 +316,11 @@ fun PregnancyApp(){
         if(reminderEnabled) scheduleWeeklyReminder(context)
         driveEmail=DriveSync.connectedEmail(context)
         if(driveEmail!=null) syncStatus="اتصال به Google Drive فعال است"
+        val profilePrefs=context.pregnancyStore.data.first()
+        userRole=profilePrefs[UserRoleKey]
+        familyId=profilePrefs[FamilyIdKey]
+        familyInviteCode=profilePrefs[FamilyInviteCodeKey]
+        onboardingStage=if(userRole==null) "welcome" else if(saved==null) "family" else "done"
         loaded=true
     }
 
@@ -372,47 +389,53 @@ fun PregnancyApp(){
         scope.launch{context.pregnancyStore.edit{it[ThemeKey]=mode}}
     }
 
-    suspend fun requestGoogleCredential(filterAuthorizedAccounts: Boolean): androidx.credentials.Credential {
+    suspend fun requestGoogleCredential(): androidx.credentials.Credential {
         val googleIdOption = GetGoogleIdOption.Builder()
             .setServerClientId(context.getString(R.string.default_web_client_id))
-            .setFilterByAuthorizedAccounts(filterAuthorizedAccounts)
+            .setFilterByAuthorizedAccounts(false)
+            .setAutoSelectEnabled(false)
             .build()
-        val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
-            .build()
-        return credentialManager.getCredential(
-            context = activity,
-            request = request
-        ).credential
+        val request = GetCredentialRequest.Builder().addCredentialOption(googleIdOption).build()
+        return credentialManager.getCredential(context = activity, request = request).credential
     }
 
-    fun signInFirebaseWithGoogle() {
+    fun signInFirebaseWithGoogle(onSignedIn: () -> Unit = {}) {
         scope.launch {
+            authBusy = true
+            authError = null
+            syncStatus = "در حال باز کردن انتخاب حساب Google..."
             try {
-                val googleCredential = try {
-                    requestGoogleCredential(filterAuthorizedAccounts = true)
-                } catch (_: NoCredentialException) {
-                    requestGoogleCredential(filterAuthorizedAccounts = false)
-                }
-
-                if (googleCredential is CustomCredential &&
-                    googleCredential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                ) {
+                val googleCredential = requestGoogleCredential()
+                if (googleCredential is CustomCredential && googleCredential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                     val idToken = GoogleIdTokenCredential.createFrom(googleCredential.data).idToken
                     val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
                     FirebaseAuth.getInstance().signInWithCredential(firebaseCredential)
                         .addOnSuccessListener { authResult ->
                             firebaseEmail = authResult.user?.email
-                            syncStatus = "ورود Firebase با Gmail انجام شد؛ همگام‌سازی ابری هنوز نیازمند تکمیل است"
+                            authBusy = false
+                            authError = null
+                            syncStatus = "ورود با Google انجام شد: " + (firebaseEmail ?: "حساب متصل")
+                            onSignedIn()
                         }
                         .addOnFailureListener { error ->
-                            syncStatus = "ورود Firebase ناموفق بود: " + (error.message ?: "خطای ناشناخته")
+                            authBusy = false
+                            authError = "Firebase: " + (error.localizedMessage ?: error.message ?: "ورود ناموفق بود")
+                            syncStatus = authError ?: "ورود ناموفق بود"
                         }
                 } else {
-                    syncStatus = "نوع حساب Google پشتیبانی نمی‌شود؛ دوباره تلاش کن"
+                    authBusy = false
+                    authError = "Google نوع اعتبارنامه پشتیبانی‌شده‌ای برنگرداند."
+                    syncStatus = authError ?: ""
                 }
             } catch (error: Exception) {
-                syncStatus = "ورود Google ناموفق بود: " + (error.localizedMessage ?: "خطای ناشناخته")
+                authBusy = false
+                val detail = error.localizedMessage ?: error.message ?: error.javaClass.simpleName
+                authError = when {
+                    error is NoCredentialException -> "حساب Google روی دستگاه پیدا نشد. ابتدا یک حساب Google به گوشی اضافه کن."
+                    detail.contains("cancel", ignoreCase = true) -> "ورود Google لغو شد."
+                    else -> "ورود Google ناموفق بود: $detail"
+                }
+                syncStatus = authError ?: "ورود ناموفق بود"
             }
         }
     }
@@ -506,34 +529,86 @@ fun PregnancyApp(){
 
     if(!loaded) return
 
-    if(!hasProfile){
-        val dark=androidx.compose.foundation.isSystemInDarkTheme()
-        val colors=if(dark) darkColorScheme(primary=Color(0xFFFFB0C8),primaryContainer=Color(0xFF7A2947)) else lightColorScheme(primary=RoseDark,primaryContainer=Blush)
-        MaterialTheme(colorScheme=colors){
+    val onboardingDark=androidx.compose.foundation.isSystemInDarkTheme()
+    val onboardingColors=if(onboardingDark) darkColorScheme(primary=Color(0xFFFFB0C8),primaryContainer=Color(0xFF7A2947)) else lightColorScheme(primary=RoseDark,primaryContainer=Blush)
+    if(onboardingStage!="done" || !hasProfile){
+        MaterialTheme(colorScheme=onboardingColors){
             CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl){
-                Scaffold(containerColor=MaterialTheme.colorScheme.background){ pad ->
-                    Column(
-                        Modifier.fillMaxSize().padding(pad).padding(horizontal=22.dp),
-                        horizontalAlignment=Alignment.CenterHorizontally,
-                        verticalArrangement=Arrangement.Center
-                    ){
-                        Surface(shape=CircleShape,color=Blush,modifier=Modifier.size(104.dp)){
-                            Box(contentAlignment=Alignment.Center){Icon(Icons.Default.ChildCare,null,tint=RoseDark,modifier=Modifier.size(58.dp))}
-                        }
-                        Text("به نونو خوش آمدی",fontFamily=Fa,fontSize=28.sp,fontWeight=FontWeight.ExtraBold,modifier=Modifier.padding(top=18.dp))
-                        Text("برای شروع، تاریخ زایمان را وارد کن تا هفته و روز بارداری دقیقاً از همان تاریخ محاسبه شود.",fontFamily=Fa,fontSize=14.sp,lineHeight=23.sp,textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=8.dp))
-                        Button(onClick={dateDialog=true},modifier=Modifier.fillMaxWidth().padding(top=24.dp),shape=RoundedCornerShape(16.dp)){
-                            Icon(Icons.Default.Event,null); Spacer(Modifier.width(8.dp)); Text("انتخاب تاریخ زایمان",fontFamily=Fa)
-                        }
+                Scaffold(containerColor=MaterialTheme.colorScheme.background){ _ ->
+                    when(onboardingStage){
+                        "welcome" -> NonoWelcomeScreen(email=firebaseEmail,error=authError,busy=authBusy,
+                            onGoogle={signInFirebaseWithGoogle { onboardingStage="role" }},
+                            onGuest={onboardingStage="role";authError=null})
+                        "role" -> NonoRoleScreen(hasLocalProfile=hasProfile,
+                            onRole={role->
+                                userRole=role
+                                scope.launch{context.pregnancyStore.edit{it[UserRoleKey]=role}}
+                                onboardingError=null
+                                onboardingStage=if(hasProfile) "done" else "family"
+                            },
+                            onBack={onboardingStage="welcome"})
+                        else -> NonoFamilySetupScreen(
+                            role=userRole ?: "mother",email=firebaseEmail,inviteCode=inviteCodeInput,
+                            busy=onboardingBusy || authBusy,error=onboardingError ?: authError,
+                            onInviteCode={inviteCodeInput=it},
+                            onCreate={dateDialog=true},
+                            onJoin={
+                                val user=FirebaseAuth.getInstance().currentUser
+                                if(user==null) onboardingError="برای پیوستن به پرونده مشترک ابتدا با Google وارد شو."
+                                else scope.launch{
+                                    onboardingBusy=true
+                                    onboardingError=null
+                                    runCatching{FamilyCloud.join(user.uid,userRole ?: "mother",inviteCodeInput)}
+                                        .onSuccess{profile->
+                                            due=profile.dueDate
+                                            familyId=profile.familyId
+                                            familyInviteCode=profile.inviteCode
+                                            hasProfile=true
+                                            context.pregnancyStore.edit{
+                                                it[DueKey]=due.toString()
+                                                it[FamilyIdKey]=profile.familyId
+                                                it[FamilyInviteCodeKey]=profile.inviteCode
+                                            }
+                                            DriveSync.saveLocalSnapshot(context,due,notes,System.currentTimeMillis())
+                                            onboardingStage="done"
+                                        }
+                                        .onFailure{onboardingError=it.message ?: "پیوستن به پرونده انجام نشد."}
+                                    onboardingBusy=false
+                                }
+                            },
+                            onGoogle={signInFirebaseWithGoogle()},
+                            onLocal={dateDialog=true}
+                        )
                     }
                 }
             }
         }
         if(dateDialog) DateDialogModern(due,{newDue->
-            due=newDue
-            hasProfile=true
-            saveLocal()
             dateDialog=false
+            due=newDue
+            val user=FirebaseAuth.getInstance().currentUser
+            scope.launch{
+                onboardingBusy=true
+                onboardingError=null
+                if(user!=null){
+                    runCatching{FamilyCloud.create(user.uid,userRole ?: "mother",newDue)}
+                        .onSuccess{profile->
+                            familyId=profile.familyId
+                            familyInviteCode=profile.inviteCode
+                            context.pregnancyStore.edit{
+                                it[FamilyIdKey]=profile.familyId
+                                it[FamilyInviteCodeKey]=profile.inviteCode
+                            }
+                            syncStatus="پرونده مشترک ساخته شد؛ کد دعوت: " + profile.inviteCode
+                        }
+                        .onFailure{syncStatus="پرونده روی گوشی ذخیره شد، اما ساخت پرونده ابری ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+                }
+                hasProfile=true
+                context.pregnancyStore.edit{it[DueKey]=newDue.toString()}
+                DriveSync.saveLocalSnapshot(context,newDue,notes,System.currentTimeMillis())
+                onboardingStage="done"
+                onboardingBusy=false
+            }
         },{dateDialog=false})
         return
     }
@@ -580,7 +655,7 @@ fun PregnancyApp(){
                 }
             ){pad->
                 when(screen){
-                    0->HomeModern(p,age,now,pad,{selectedWeek=it},{screen=5},{screen=8})
+                    0->HomeModern(p,age,now,pad,userRole ?: "mother",{selectedWeek=it},{screen=5},{screen=8})
                     1->CurrentWeekModern(age.first,age.second,now,p,pad,{selectedWeek=it},{screen=6})
                     2->NotesModern(
                         notes=notes,
@@ -613,6 +688,22 @@ fun PregnancyApp(){
                         onDue={newDue->due=newDue;saveLocal()},
                         driveEmail=driveEmail,
                         firebaseEmail=firebaseEmail,
+                        userRole=userRole ?: "mother",
+                        familyInviteCode=familyInviteCode,
+                        onCreateFamily={
+                            val user=FirebaseAuth.getInstance().currentUser
+                            if(user==null) syncStatus="برای ساخت پرونده مشترک ابتدا با Google وارد شو."
+                            else scope.launch{
+                                runCatching{FamilyCloud.create(user.uid,userRole ?: "mother",due)}
+                                    .onSuccess{profile->
+                                        familyId=profile.familyId
+                                        familyInviteCode=profile.inviteCode
+                                        scope.launch{context.pregnancyStore.edit{it[FamilyIdKey]=profile.familyId;it[FamilyInviteCodeKey]=profile.inviteCode}}
+                                        syncStatus="پرونده مشترک ساخته شد؛ کد دعوت: " + profile.inviteCode
+                                    }
+                                    .onFailure{syncStatus="ساخت پرونده مشترک ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+                            }
+                        },
                         onFirebaseSignIn={signInFirebaseWithGoogle()},
                         onFirebaseSignOut={signOutFirebase()},
                         syncStatus=syncStatus,
@@ -723,7 +814,7 @@ fun PregnancyApp(){
 }
 
 @Composable
-fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onWeek:(Int)->Unit,onExams:()->Unit,onNames:()->Unit){
+fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,role:String,onWeek:(Int)->Unit,onExams:()->Unit,onNames:()->Unit){
     val week=age.first.coerceIn(1,40)
     val plan=weeklyPlan(week)
     val daysLeft=ChronoUnit.DAYS.between(now,p.due).coerceAtLeast(0).toInt()
@@ -734,7 +825,7 @@ fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onW
         contentPadding=PaddingValues(top=8.dp,bottom=28.dp)
     ){
         item{
-            HeroPregnancyCard(age,p,now)
+            HeroPregnancyCard(age,p,now,role)
         }
         item{
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
@@ -851,7 +942,7 @@ fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onW
 }
 
 @Composable
-fun HeroPregnancyCard(age:Pair<Int,Int>,p:Pregnancy,now:LocalDate){
+fun HeroPregnancyCard(age:Pair<Int,Int>,p:Pregnancy,now:LocalDate,role:String){
     val progress=p.percent(now)
     Card(
         shape=RoundedCornerShape(30.dp),
@@ -880,7 +971,7 @@ fun HeroPregnancyCard(age:Pair<Int,Int>,p:Pregnancy,now:LocalDate){
             }
             Spacer(Modifier.width(18.dp))
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)){
-                Text("سلام مامان! 🌷",fontFamily=Fa,fontSize=14.sp,color=Color.White.copy(alpha=.85f))
+                Text(if(role=="father") "سلام بابا! 👋" else "سلام مامان! 🌷",fontFamily=Fa,fontSize=14.sp,color=Color.White.copy(alpha=.85f))
                 Text("رشد بارداری",fontFamily=Fa,fontSize=24.sp,fontWeight=FontWeight.Bold,color=Color.White)
                 Text(
                     "هفته "+fa(age.first)+" و "+fa(age.second)+" روز",
@@ -1492,6 +1583,9 @@ fun SettingsModern(
     onDue:(LocalDate)->Unit,
     driveEmail:String?,
     firebaseEmail:String?,
+    userRole:String,
+    familyInviteCode:String?,
+    onCreateFamily:()->Unit,
     onFirebaseSignIn:()->Unit,
     onFirebaseSignOut:()->Unit,
     syncStatus:String,
@@ -1513,12 +1607,36 @@ fun SettingsModern(
             Text("تنظیمات",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold)
             Text("اطلاعات بارداری، همگام‌سازی و ظاهر برنامه را مدیریت کن.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
         }
-        item{SettingTile(Icons.Default.Event,"تاریخ زایمان","تاریخ فعلی: "+jalali(due)){onDue(due)}}
+        item{SettingTile(Icons.Default.Event,"تاریخ زایمان بارداری","تاریخ پرونده: "+jalali(due)){onDue(due)}}
+        item{
+            Card(shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+                Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                    Row(verticalAlignment=Alignment.CenterVertically){
+                        Icon(Icons.Default.FamilyRestroom,null,tint=RoseDark)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)){
+                            Text("پرونده خانوادگی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
+                            Text(if(userRole=="father") "نقش شما: پدر" else "نقش شما: مادر",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if(familyInviteCode!=null){
+                        Text("کد دعوت همسر",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(familyInviteCode,fontFamily=Fa,fontSize=22.sp,fontWeight=FontWeight.Bold,color=RoseDark)
+                        Text("همسرت می‌تواند با این کد به همین پرونده بپیوندد.",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }else{
+                        Text("این پرونده فعلاً فقط روی این گوشی ذخیره شده است.",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(onClick=onCreateFamily,enabled=firebaseEmail!=null,modifier=Modifier.fillMaxWidth()){
+                            Text(if(firebaseEmail==null) "برای اشتراک‌گذاری ابتدا وارد Google شو" else "ساخت پرونده مشترک",fontFamily=Fa)
+                        }
+                    }
+                }
+            }
+        }
         item{
             SettingTile(
                 Icons.Default.AccountCircle,
                 if(firebaseEmail==null) "ورود با حساب Gmail" else "حساب Firebase متصل",
-                firebaseEmail ?: "ورود امن Google؛ همگام‌سازی ابری در مرحله بعد فعال می‌شود"
+                firebaseEmail ?: syncStatus.ifBlank { "برای ورود و ساخت پرونده مشترک با Google متصل شو" }
             ){if(firebaseEmail==null) onFirebaseSignIn() else onFirebaseSignOut()}
         }
         item{SettingTile(Icons.Default.Language,"تقویم","تقویم و تاریخ‌ها به‌صورت شمسی"){}}
