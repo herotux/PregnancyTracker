@@ -49,11 +49,11 @@ Debug and release certificates are different. Adding only the debug SHA-1 does n
 After the signing secrets and Firebase release fingerprint are configured, create and push a version tag:
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-GitHub Actions builds a signed release APK and publishes it to GitHub Releases with generated release notes and a SHA-256 checksum. Use a new, higher semantic version for each release (for example `v1.0.2`, then `v1.1.0`). Never replace the signing key or reuse an already-published versionCode.
+GitHub Actions builds a signed release APK and publishes it to GitHub Releases with generated release notes and a SHA-256 checksum. The first release should use `v1.0.0`; use a new, higher semantic version for each later release (for example `v1.0.1`, then `v1.1.0`). Never replace the signing key or reuse an already-published versionCode.
 
 ## 5. Release update notices in Nono
 
