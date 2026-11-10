@@ -280,6 +280,7 @@ fun PregnancyApp(){
     var familyInviteCode by remember{mutableStateOf<String?>(null)}
     var onboardingStage by remember{mutableStateOf("welcome")}
     var inviteCodeInput by remember{mutableStateOf("")}
+    var familyJoinDialog by remember{mutableStateOf(false)}
     var onboardingBusy by remember{mutableStateOf(false)}
     var onboardingError by remember{mutableStateOf<String?>(null)}
     var authBusy by remember{mutableStateOf(false)}
@@ -713,6 +714,7 @@ fun PregnancyApp(){
                                     .onFailure{syncStatus="ساخت پرونده مشترک ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
                             }
                         },
+                        onJoinFamily={familyJoinDialog=true},
                         onFirebaseSignIn={signInFirebaseWithGoogle()},
                         onFirebaseSignOut={signOutFirebase()},
                         syncStatus=syncStatus,
@@ -808,6 +810,51 @@ fun PregnancyApp(){
             examEditorOpen=true
         },onClose={examDetail=null})
     }
+
+    if(familyJoinDialog) AlertDialog(
+        onDismissRequest={familyJoinDialog=false},
+        icon={Icon(Icons.Default.GroupAdd,null,tint=RoseDark)},
+        title={Text("پیوستن به پرونده خانواده",fontFamily=Fa,fontWeight=FontWeight.Bold)},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                Text("کد دعوت ۸ نویسه‌ای را که همسرت از نونو گرفته وارد کن.",fontFamily=Fa,fontSize=13.sp,lineHeight=20.sp)
+                OutlinedTextField(
+                    value=inviteCodeInput,
+                    onValueChange={inviteCodeInput=it.uppercase().filter(Char::isLetterOrDigit).take(8)},
+                    singleLine=true,
+                    label={Text("کد دعوت",fontFamily=Fa)},
+                    modifier=Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton={
+            Button(onClick={
+                val user=FirebaseAuth.getInstance().currentUser
+                if(user==null) syncStatus="ابتدا با Google وارد شو."
+                else if(inviteCodeInput.length==8) scope.launch{
+                    onboardingBusy=true
+                    runCatching{FamilyCloud.join(user.uid,userRole ?: "mother",inviteCodeInput)}
+                        .onSuccess{profile->
+                            due=profile.dueDate
+                            familyId=profile.familyId
+                            familyInviteCode=profile.inviteCode
+                            hasProfile=true
+                            context.pregnancyStore.edit{
+                                it[DueKey]=due.toString()
+                                it[FamilyIdKey]=profile.familyId
+                                it[FamilyInviteCodeKey]=profile.inviteCode
+                            }
+                            saveLocal()
+                            syncStatus="به پرونده مشترک خانواده پیوستی."
+                            familyJoinDialog=false
+                        }
+                        .onFailure{syncStatus="پیوستن ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+                    onboardingBusy=false
+                }
+            },enabled=inviteCodeInput.length==8 && !onboardingBusy){Text("پیوستن",fontFamily=Fa)}
+        },
+        dismissButton={TextButton(onClick={familyJoinDialog=false}){Text("لغو",fontFamily=Fa)}}
+    )
 
     if(shareDialog) DriveShareDialog(
         email=partnerEmail,
@@ -1595,6 +1642,7 @@ fun SettingsModern(
     userRole:String,
     familyInviteCode:String?,
     onCreateFamily:()->Unit,
+    onJoinFamily:()->Unit,
     onFirebaseSignIn:()->Unit,
     onFirebaseSignOut:()->Unit,
     syncStatus:String,
@@ -1635,7 +1683,10 @@ fun SettingsModern(
                     }else{
                         Text("این پرونده فعلاً فقط روی این گوشی ذخیره شده است.",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick=onCreateFamily,enabled=firebaseEmail!=null,modifier=Modifier.fillMaxWidth()){
-                            Text(if(firebaseEmail==null) "برای اشتراک‌گذاری ابتدا وارد Google شو" else "ساخت پرونده مشترک",fontFamily=Fa)
+                            Text(if(firebaseEmail==null) "برای اشتراک‌گذاری ابتدا وارد Google شو" else "ایجاد پرونده بارداری",fontFamily=Fa)
+                        }
+                        OutlinedButton(onClick=onJoinFamily,enabled=firebaseEmail!=null,modifier=Modifier.fillMaxWidth()){
+                            Text("پیوستن به پرونده همسر با کد دعوت",fontFamily=Fa)
                         }
                     }
                 }
