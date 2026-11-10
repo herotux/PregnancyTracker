@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "187292523290",
+    "project_id": "nono-ef27d",
+    "storage_bucket": "nono-ef27d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:187292523290:android:04c23fbcb30afa93c72aa3",
+        "android_client_info": {
+          "package_name": "ir.herotux.pregnancytracker"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "187292523290-5lsjekij36hnfucrr3chsluutgocshtp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBswi2OjAGnw9ZJ6w-vWk_fKLJUy_g_tsg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "187292523290-5lsjekij36hnfucrr3chsluutgocshtp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
