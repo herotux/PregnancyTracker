@@ -1700,7 +1700,7 @@ fun SettingsModern(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)){
                             Text("پرونده خانوادگی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
-                            Text(if(userRole=="father") "نقش شما: پدر" else "نقش شما: مادر",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if(userRole=="father") "نقش شما: همراه" else "نقش شما: کاربر اصلی",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     if(familyInviteCode!=null){
