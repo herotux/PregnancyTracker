@@ -1,11 +1,37 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Each signed-in user can access only their own private pregnancy data.
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function signedIn() {
+      return request.auth != null;
     }
-    // Deny all other access by default.
+    function isFamilyMember(data) {
+      return signedIn() && data.members[request.auth.uid] != null;
+    }
+    match /users/{userId}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+    match /families/{familyId} {
+      allow get: if isFamilyMember(resource.data)
+        || (signedIn() && resource.data.inviteCode == familyId);
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.inviteCode == familyId
+        && request.resource.data.members[request.auth.uid] in ['mother', 'father']
+        && request.resource.data.members.size() == 1
+        && request.resource.data.dueDate is string;
+      allow update: if signedIn() && (
+        (isFamilyMember(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dueDate', 'updatedAt']))
+        ||
+        (resource.data.inviteCode == familyId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.members[request.auth.uid] in ['mother', 'father']
+          && request.resource.data.members.size() == resource.data.members.size() + 1)
+      );
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
     match /{document=**} {
       allow read, write: if false;
     }
