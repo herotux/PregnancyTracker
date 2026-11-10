@@ -26,7 +26,7 @@ Android package: `ir.herotux.pregnancytracker`
 After Firebase CLI is authenticated with an account that has access to `nono-ef27d`, run:
 
 ```bash
-npx -y firebase-tools@latest deploy --project nono-ef27d --only firestore:rules
+npx --yes firebase-tools@latest deploy --project nono-ef27d --only firestore:rules
 ```
 
 The rules allow authenticated users to access only their own `users/{uid}` data and family profiles they belong to (or can access using a valid invite code). Family listing is disabled. Do not loosen these rules to public read/write. Deploy the updated rules after pulling this commit.
