@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
@@ -211,6 +212,7 @@ internal fun calculatedCycleLength(logs: List<CycleDayLog>): Int? {
     return (if (values.size % 2 == 1) values[mid] else (values[mid - 1] + values[mid]) / 2).coerceIn(15, 90)
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun CycleHistoryEditor(logs: List<CycleDayLog>, onSave: (CycleDayLog) -> Unit, onDelete: (String) -> Unit) {
     var date by remember { mutableStateOf(LocalDate.now().minusDays(1)) }
