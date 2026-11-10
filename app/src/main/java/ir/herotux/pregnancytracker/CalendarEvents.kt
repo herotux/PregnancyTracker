@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -135,7 +136,7 @@ internal fun cancelCalendarAlarm(context: Context, id: Long) {
 internal fun scheduleCalendarEntry(context: Context, entry: CalendarEntry) {
     cancelCalendarAlarm(context, entry.id)
     if (entry.completed || entry.allDay) return
-    val time = runCatching { LocalTime.parse(entry.time) }.getOrNull() ?: return
+    val time = if (entry.allDay) LocalTime.of(9, 0) else runCatching { LocalTime.parse(entry.time) }.getOrNull() ?: return
     var target = LocalDateTime.of(entry.date, time).minusMinutes(entry.leadMinutes.toLong())
     val now = LocalDateTime.now()
     if (!target.isAfter(now)) {
@@ -247,7 +248,8 @@ private fun parseJalaliCalendarDate(value: String): LocalDate? {
     val y = parts[0].toIntOrNull() ?: return null
     val m = parts[1].toIntOrNull() ?: return null
     val d = parts[2].toIntOrNull() ?: return null
-    if (m !in 1..12 || d !in 1..if (m <= 6) 31 else if (m <= 11) 30 else 30) return null
+    val maxDay = if (m <= 6) 31 else if (m <= 11) 30 else if (isJalaliLeap(y)) 30 else 29
+    if (m !in 1..12 || d !in 1..maxDay) return null
     return runCatching { jalaliToGregorian(y, m, d) }.getOrNull()
 }
 
