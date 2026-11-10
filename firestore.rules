@@ -9,7 +9,7 @@ service cloud.firestore {
       return scopes is list
         && scopes.size() > 0
         && scopes.size() <= 8
-        && scopes.hasOnly([
+        && scopes.toSet().hasOnly([
           'pregnancy_summary',
           'exam_records',
           'ultrasounds',
@@ -95,7 +95,7 @@ service cloud.firestore {
     match /careRequests/{requestId} {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly([
-          'patientUid', 'familyId', 'professionalUid', 'professionalRole',
+          'patientUid', 'familyId', 'professionalUid', 'professionalRole', 'inviteCode',
           'scopes', 'status', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.patientUid == request.auth.uid
