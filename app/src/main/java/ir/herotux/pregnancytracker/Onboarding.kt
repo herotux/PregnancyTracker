@@ -25,7 +25,7 @@ fun NonoWelcomeScreen(email: String?, error: String?, busy: Boolean, onGoogle: (
             Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.ChildCare, null, tint = RoseDark, modifier = Modifier.size(54.dp)) }
         }
         Text("به نونو خوش آمدی", fontFamily = Fa, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 18.dp))
-        Text("همراه مادر، پدر و خانواده در مسیر والد شدن", fontFamily = Fa, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp))
+        Text("همراه در مسیر سلامت باروری، بارداری و والد شدن", fontFamily = Fa, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp))
         Button(onClick = onGoogle, enabled = !busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             if (busy) CircularProgressIndicator(Modifier.size(19.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Icon(Icons.Default.AccountCircle, null)
             Spacer(Modifier.width(9.dp))
@@ -42,11 +42,11 @@ fun NonoWelcomeScreen(email: String?, error: String?, busy: Boolean, onGoogle: (
 @Composable
 fun NonoRoleScreen(hasLocalProfile: Boolean, onRole: (String) -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text("نقش شما در خانواده چیست؟", fontFamily = Fa, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text("نقش شما در مسیر سلامت باروری چیست؟", fontFamily = Fa, fontSize = 23.sp, fontWeight = FontWeight.Bold)
         Text(if (hasLocalProfile) "اطلاعات بارداری فعلی حفظ می‌شود." else "نقش فقط برای شخصی‌سازی تجربه نونو است.", fontFamily = Fa, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp))
-        RoleOption(Icons.Default.Person, "مادر", "مدیریت و پیگیری پرونده بارداری") { onRole("mother") }
+        RoleOption(Icons.Default.Person, "مادر", "مدیریت چرخه قاعدگی، باروری و پرونده سلامت") { onRole("mother") }
         Spacer(Modifier.height(12.dp))
-        RoleOption(Icons.Default.Face, "پدر", "همراهی و مشاهده روند بارداری همسر") { onRole("father") }
+        RoleOption(Icons.Default.Face, "پدر", "همراهی در مسیر برنامه‌ریزی، بارداری و سلامت خانواده") { onRole("father") }
         TextButton(onClick = onBack, modifier = Modifier.padding(top = 12.dp)) { Text("بازگشت", fontFamily = Fa) }
     }
 }
