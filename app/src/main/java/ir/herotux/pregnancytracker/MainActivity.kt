@@ -1476,7 +1476,7 @@ fun SettingsModern(
         item{SettingTile(Icons.Default.Event,"تاریخ زایمان","تاریخ فعلی: "+jalali(due)){onDue(due)}}
         item{
             SettingTile(
-                if(firebaseEmail==null) Icons.Default.Login else Icons.Default.AccountCircle,
+                Icons.Default.AccountCircle,
                 if(firebaseEmail==null) "ورود با حساب Gmail" else "حساب Firebase متصل",
                 firebaseEmail ?: "ورود امن Google؛ همگام‌سازی ابری در مرحله بعد فعال می‌شود"
             ){if(firebaseEmail==null) onFirebaseSignIn() else onFirebaseSignOut()}
