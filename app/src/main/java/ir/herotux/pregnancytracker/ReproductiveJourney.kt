@@ -282,7 +282,7 @@ internal fun CycleModeScreen(
                 }
             }
         }
-        item {
+        if (stage != STAGE_POSTPARTUM) item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.fillMaxWidth().padding(17.dp)) {
                     Text("طول معمول چرخه", fontFamily = Fa, fontWeight = FontWeight.Bold)
