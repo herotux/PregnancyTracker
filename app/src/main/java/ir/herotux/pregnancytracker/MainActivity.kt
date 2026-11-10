@@ -83,6 +83,7 @@ private val DatingMethodKey = stringPreferencesKey("pregnancy_dating_method")
 private val DatingPendingKey = booleanPreferencesKey("pregnancy_dating_pending")
 private val LastPeriodKey = stringPreferencesKey("cycle_last_period")
 private val CycleLengthKey = stringPreferencesKey("cycle_length")
+private val CycleLogsKey = stringPreferencesKey("cycle_day_logs")
 private val DatingReferenceDateKey = stringPreferencesKey("pregnancy_dating_reference_date")
 private val DatingWeeksKey = stringPreferencesKey("pregnancy_dating_weeks")
 private val DatingDaysKey = stringPreferencesKey("pregnancy_dating_days")
@@ -285,6 +286,7 @@ fun PregnancyApp(){
     var gestationalDays by remember{mutableStateOf("0")}
     var cycleLength by remember{mutableIntStateOf(28)}
     var lastPeriod by remember{mutableStateOf<LocalDate?>(null)}
+    var cycleLogs by remember{mutableStateOf(emptyList<CycleDayLog>())}
     var embryoAgeDays by remember{mutableIntStateOf(5)}
     var datePickerTarget by remember{mutableStateOf("due")}
     var screen by remember{mutableIntStateOf(0)}
@@ -340,6 +342,7 @@ fun PregnancyApp(){
         datingPending=prefs[DatingPendingKey] ?: false
         cycleLength=(prefs[CycleLengthKey]?.toIntOrNull() ?: 28).coerceIn(21,45)
         lastPeriod=prefs[LastPeriodKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()}
+        cycleLogs=decodeCycleLogs(prefs[CycleLogsKey])
         val snapshot=DriveSync.readLocalSnapshot(context)
         if(snapshot.first.isNotEmpty()) notes=snapshot.first
         localUpdatedAt=snapshot.second
@@ -726,7 +729,16 @@ fun PregnancyApp(){
             onPickPeriodDate={datePickerTarget="period";dateDialog=true},
             onCycleLength={value->cycleLength=value;scope.launch{context.pregnancyStore.edit{it[CycleLengthKey]=value.toString()}}},
             onSwitchToPregnancy={journeyStage=STAGE_POSITIVE;datingMethod=DATING_LMP;onboardingStage="journey"},
-            onEditStage={onboardingStage="journey"}
+            onEditStage={onboardingStage="journey"},
+            cycleLogs=cycleLogs,
+            onSaveCycleLog={entry->
+                cycleLogs=(cycleLogs.filterNot{it.date==entry.date}+entry).sortedByDescending{it.date}.take(365)
+                scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
+            },
+            onDeleteCycleLog={date->
+                cycleLogs=cycleLogs.filterNot{it.date==date}
+                scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
+            }
         )
         if(dateDialog) DateDialogModern(LocalDate.now(),{newDate->
             dateDialog=false;lastPeriod=newDate
