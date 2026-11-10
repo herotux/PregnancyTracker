@@ -361,7 +361,7 @@ fun CalendarModern(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 7.dp)) {
-                        Surface(Modifier.size(6.dp), shape = CircleShape, color = Rose)
+                        Box(Modifier.size(6.dp).background(Rose, CircleShape))
                         Text("دارای رویداد یا یادآور", fontFamily = Fa, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -400,7 +400,7 @@ fun CalendarModern(
                 Card(shape = RoundedCornerShape(17.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.fillMaxWidth().padding(13.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(shape = RoundedCornerShape(11.dp), color = if (entry.type == "reminder") Sage else Blush, modifier = Modifier.size(38.dp)) {
+                            Surface(shape = RoundedCornerShape(11.dp), color = if (entry.type == "reminder") Color(0xFFE3F1E7) else Blush, modifier = Modifier.size(38.dp)) {
                                 Box(contentAlignment = Alignment.Center) { Icon(if (entry.type == "reminder") Icons.Default.NotificationsActive else Icons.Default.Event, null, tint = RoseDark) }
                             }
                             Spacer(Modifier.width(10.dp))
