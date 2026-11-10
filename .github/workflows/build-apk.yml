@@ -1,7 +1,7 @@
 name: Build APK
 on:
   push:
-    branches: [main]
+    branches: [main, feature/professional-care-access]
   pull_request:
     paths:
       - "app/**"
@@ -30,7 +30,7 @@ jobs:
         id: debug-keystore-cache
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
+          path: ~/.config/.android/debug.keystore
           key: android-debug-keystore-v1
       - name: Verify Gradle
         run: gradle --version
