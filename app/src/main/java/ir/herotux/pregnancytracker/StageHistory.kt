@@ -11,7 +11,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -19,7 +18,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-private val Context.stageHistoryStore by preferencesDataStore(name = "nono_stage_history")
 private val StageHistoryRecordsKey = stringPreferencesKey("transitions")
 
 internal data class StageTransition(
@@ -73,7 +71,7 @@ internal fun StageHistorySection() {
     val context = androidx.compose.ui.platform.LocalContext.current
     var history by remember { mutableStateOf<List<StageTransition>>(emptyList()) }
     LaunchedEffect(Unit) {
-        history = decodeStageHistory(context.stageHistoryStore.data.first()[StageHistoryRecordsKey])
+        history = decodeStageHistory(context.pregnancyStore.data.first()[StageHistoryRecordsKey])
     }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
