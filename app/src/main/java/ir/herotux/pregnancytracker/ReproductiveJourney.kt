@@ -257,7 +257,10 @@ internal fun CycleModeScreen(
     onPickPeriodDate: () -> Unit,
     onCycleLength: (Int) -> Unit,
     onSwitchToPregnancy: () -> Unit,
-    onEditStage: () -> Unit
+    onEditStage: () -> Unit,
+    cycleLogs: List<CycleDayLog>,
+    onSaveCycleLog: (CycleDayLog) -> Unit,
+    onDeleteCycleLog: (String) -> Unit
 ) {
     val nextPeriod = lastPeriod?.plusDays(cycleLength.toLong())
     val ovulation = lastPeriod?.plusDays((cycleLength - 14).toLong())
@@ -307,6 +310,13 @@ internal fun CycleModeScreen(
                     }
                 }
             }
+        }
+        item {
+            CycleLogSection(
+                logs = cycleLogs,
+                onSave = onSaveCycleLog,
+                onDelete = onDeleteCycleLog
+            )
         }
         item {
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
