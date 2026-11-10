@@ -74,6 +74,7 @@ internal fun decodeCycleLogs(raw: String?): List<CycleDayLog> {
     }.getOrDefault(emptyList())
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun CycleLogSection(
     logs: List<CycleDayLog>,
@@ -88,6 +89,14 @@ internal fun CycleLogSection(
     var symptoms by remember { mutableStateOf(setOf<String>()) }
     val today = LocalDate.now()
     val todayLog = logs.firstOrNull { it.date == today.toString() }
+    LaunchedEffect(todayLog) {
+        bleeding = todayLog?.bleeding ?: "none"
+        mucus = todayLog?.cervicalMucus ?: "unknown"
+        lh = todayLog?.lhResult ?: "none"
+        bbt = todayLog?.basalTemperature ?: ""
+        note = todayLog?.note ?: ""
+        symptoms = todayLog?.symptoms?.toSet() ?: emptySet()
+    }
 
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -98,14 +107,14 @@ internal fun CycleLogSection(
             }
             Text("امروز؛ ${jalali(today)}", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("شدت خون‌ریزی", fontFamily = Fa, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("none" to "ندارد", "spotting" to "لکه‌بینی", "light" to "کم", "medium" to "متوسط", "heavy" to "زیاد").forEach { (value, label) ->
                     FilterChip(selected = bleeding == value, onClick = { bleeding = value }, label = { Text(label, fontFamily = Fa, fontSize = 10.sp) })
                 }
             }
             Text("علائم امروز", fontFamily = Fa, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
             val symptomOptions = listOf("درد شکم", "گرفتگی", "سردرد", "حساسیت سینه", "نفخ", "خستگی", "تغییر خلق", "تهوع")
-            FlowRowCompat {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 symptomOptions.forEach { symptom ->
                     FilterChip(
                         selected = symptom in symptoms,
@@ -115,13 +124,13 @@ internal fun CycleLogSection(
                 }
             }
             Text("ترشحات دهانه رحم", fontFamily = Fa, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("unknown" to "نامشخص", "dry" to "خشک", "sticky" to "چسبنده", "creamy" to "کِرِمی", "eggwhite" to "شفاف و کش‌دار").forEach { (value, label) ->
                     FilterChip(selected = mucus == value, onClick = { mucus = value }, label = { Text(label, fontFamily = Fa, fontSize = 9.sp) })
                 }
             }
             Text("نتیجه تست LH", fontFamily = Fa, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("none" to "ندادم", "negative" to "منفی", "positive" to "مثبت", "peak" to "اوج").forEach { (value, label) ->
                     FilterChip(selected = lh == value, onClick = { lh = value }, label = { Text(label, fontFamily = Fa, fontSize = 10.sp) })
                 }
@@ -175,13 +184,6 @@ internal fun CycleLogSection(
         }
     }
 }
-
-/** Simple wrapping layout without adding a dependency. */
-@Composable
-private fun FlowRowCompat(content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { content() }
-}
-
 
 internal val preconceptionChecklist = listOf(
     "برای مشاوره پیش از بارداری وقت گرفته‌ام",
