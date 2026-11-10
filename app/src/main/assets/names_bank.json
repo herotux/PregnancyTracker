@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Starter name bank for Nono. Blank meanings are intentionally not guessed and can be completed after editorial verification.",
+  "names": [
+    {"id":"g1","name":"آوا","gender":"دختر","meaning":"آواز و نوا","origin":"فارسی"},
+    {"id":"g2","name":"رها","gender":"دختر","meaning":"آزاد و وارسته","origin":"فارسی"},
+    {"id":"g3","name":"آناهید","gender":"دختر","meaning":"پاک و بی‌آلایش؛ نام ایزدبانوی آب","origin":"ایرانی"},
+    {"id":"g4","name":"باران","gender":"دختر","meaning":"بارش باران","origin":"فارسی"},
+    {"id":"g5","name":"مانا","gender":"دختر","meaning":"پایدار و ماندگار","origin":"فارسی"},
+    {"id":"g6","name":"دریا","gender":"دختر","meaning":"دریا","origin":"فارسی"},
+    {"id":"g7","name":"یسنا","gender":"دختر","meaning":"ستایش و نیایش","origin":"اوستایی"},
+    {"id":"g8","name":"مهرا","gender":"دختر","meaning":"وابسته به مهر و محبت","origin":"فارسی"},
+    {"id":"g9","name":"آیرا","gender":"دختر","meaning":"","origin":""},
+    {"id":"g10","name":"نیلا","gender":"دختر","meaning":"","origin":""},
+    {"id":"g11","name":"هانا","gender":"دختر","meaning":"","origin":""},
+    {"id":"g12","name":"آترینا","gender":"دختر","meaning":"","origin":""},
+    {"id":"b1","name":"آراد","gender":"پسر","meaning":"","origin":""},
+    {"id":"b2","name":"آرتین","gender":"پسر","meaning":"","origin":""},
+    {"id":"b3","name":"رادین","gender":"پسر","meaning":"جوانمرد و بخشنده","origin":"فارسی"},
+    {"id":"b4","name":"ماهان","gender":"پسر","meaning":"منسوب به ماه","origin":"فارسی"},
+    {"id":"b5","name":"سام","gender":"پسر","meaning":"نام پهلوان ایرانی","origin":"ایرانی"},
+    {"id":"b6","name":"آریا","gender":"پسر","meaning":"نجیب و آزاده","origin":"ایرانی"},
+    {"id":"b7","name":"رایان","gender":"پسر","meaning":"","origin":""},
+    {"id":"b8","name":"هیراد","gender":"پسر","meaning":"","origin":""},
+    {"id":"b9","name":"بردیا","gender":"پسر","meaning":"نام شاهزاده هخامنشی","origin":"ایرانی"},
+    {"id":"b10","name":"نیوان","gender":"پسر","meaning":"","origin":""},
+    {"id":"b11","name":"پارسا","gender":"پسر","meaning":"پرهیزگار","origin":"فارسی"},
+    {"id":"b12","name":"آروین","gender":"پسر","meaning":"","origin":""}
+  ]
+}
