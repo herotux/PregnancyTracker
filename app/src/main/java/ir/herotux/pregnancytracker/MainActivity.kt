@@ -280,6 +280,7 @@ fun PregnancyApp(){
     var journeyStage by remember{mutableStateOf(STAGE_PLANNING)}
     var datingMethod by remember{mutableStateOf(DATING_LMP)}
     var journeyDate by remember{mutableStateOf(LocalDate.now())}
+    var journeyDateSelected by remember{mutableStateOf(false)}
     var gestationalWeeks by remember{mutableStateOf("8")}
     var gestationalDays by remember{mutableStateOf("0")}
     var cycleLength by remember{mutableIntStateOf(28)}
@@ -332,6 +333,7 @@ fun PregnancyApp(){
         hasPregnancyDating=saved!=null && ! (prefs[DatingPendingKey] ?: false) && journeyStage in listOf(STAGE_POSITIVE, STAGE_PREGNANT)
         datingMethod=prefs[DatingMethodKey] ?: DATING_LMP
         journeyDate=prefs[DatingReferenceDateKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()} ?: LocalDate.now()
+        journeyDateSelected=prefs[DatingReferenceDateKey]!=null
         gestationalWeeks=prefs[DatingWeeksKey] ?: "8"
         gestationalDays=prefs[DatingDaysKey] ?: "0"
         embryoAgeDays=(prefs[DatingEmbryoAgeKey]?.toIntOrNull() ?: 5).coerceIn(3,6)
@@ -614,9 +616,10 @@ fun PregnancyApp(){
                             onBack={onboardingStage="welcome"})
                         "journey" -> ReproductiveJourneyScreen(
                             stage=journeyStage, datingMethod=datingMethod, referenceDate=journeyDate,
+                            dateSelected=journeyDateSelected,
                             gestationalWeeks=gestationalWeeks, gestationalDays=gestationalDays,
                             cycleLength=cycleLength.toString(), embryoAgeDays=embryoAgeDays,
-                            onStage={journeyStage=it}, onMethod={datingMethod=it},
+                            onStage={journeyStage=it}, onMethod={datingMethod=it;journeyDateSelected=false},
                             onPickDate={datePickerTarget="journey";dateDialog=true},
                             onWeeks={gestationalWeeks=it}, onDays={gestationalDays=it},
                             onCycleLength={cycleLength=it.toIntOrNull()?.coerceIn(21,45) ?: 28},
@@ -700,7 +703,7 @@ fun PregnancyApp(){
             {newDate->
                 dateDialog=false
                 when(datePickerTarget){
-                    "journey" -> journeyDate=newDate
+                    "journey" -> {journeyDate=newDate;journeyDateSelected=true}
                     "period" -> {
                         lastPeriod=newDate
                         scope.launch{context.pregnancyStore.edit{it[LastPeriodKey]=newDate.toString()}}
