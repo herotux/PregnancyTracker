@@ -633,7 +633,8 @@ fun PregnancyApp(){
                             onContinueCycle={
                                 datingPending=false; hasProfile=true; hasPregnancyDating=false
                                 scope.launch{context.pregnancyStore.edit{
-                                    it[JourneyStageKey]=journeyStage
+                                    it.recordStageTransition(journeyStage)
+                                     it[JourneyStageKey]=journeyStage
                                     it[CycleLengthKey]=cycleLength.toString()
                                     it[DatingPendingKey]=false
                                 }}
@@ -650,7 +651,8 @@ fun PregnancyApp(){
                                 datingPending=estimated==null; hasProfile=true; hasPregnancyDating=estimated!=null
                                 if(estimated!=null) due=estimated
                                 scope.launch{context.pregnancyStore.edit{
-                                    it[JourneyStageKey]=journeyStage
+                                    it.recordStageTransition(journeyStage)
+                                     it[JourneyStageKey]=journeyStage
                                     it[DatingMethodKey]=effectiveMethod
                                     if(journeyDateSelected) it[DatingReferenceDateKey]=journeyDate.toString() else it.remove(DatingReferenceDateKey)
                                     it[DatingWeeksKey]=gestationalWeeks
