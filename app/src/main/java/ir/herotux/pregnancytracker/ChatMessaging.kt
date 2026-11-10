@@ -288,7 +288,7 @@ fun MessagingCenterScreen(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("پیدا کردن کاربر", fontFamily = Fa, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
-                        value = username, onValueChange = { username = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }.take(20) },
+                        value = username, onValueChange = { username = it.lowercase().filter { c -> c in 'a'..'z' || c in '0'..'9' || c == '_' }.take(20) },
                         modifier = Modifier.fillMaxWidth(), singleLine = true,
                         label = { Text("نام کاربری طرف مقابل", fontFamily = Fa) },
                         leadingIcon = { Text("@", fontWeight = FontWeight.Bold) },
