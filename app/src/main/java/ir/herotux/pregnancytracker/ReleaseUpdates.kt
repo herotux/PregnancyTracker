@@ -5,6 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.layout.*
@@ -158,6 +162,11 @@ fun UpdateCenterScreen(onBack: () -> Unit) {
     var checking by remember { mutableStateOf(false) }
     var checked by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) NonoUpdateService.schedule(context)
+    }
+    val notificationsEnabled = Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     val currentVersion = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "نامشخص" }.getOrDefault("نامشخص")
     }
@@ -182,6 +191,10 @@ fun UpdateCenterScreen(onBack: () -> Unit) {
                 Icon(Icons.Default.SystemUpdate, null, tint = RoseDark, modifier = Modifier.size(34.dp))
                 Text("نسخه نصب‌شده: $currentVersion", fontFamily = Fa, fontWeight = FontWeight.Bold)
                 Text("نونو به‌صورت دوره‌ای انتشارهای رسمی GitHub را بررسی می‌کند. اگر نسخه جدیدی منتشر شود، اعلان دریافت می‌کنی.", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!notificationsEnabled && Build.VERSION.SDK_INT >= 33) OutlinedButton(
+                    onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("فعال‌سازی اعلان بروزرسانی", fontFamily = Fa) }
                 Button(onClick = { check() }, enabled = !checking, modifier = Modifier.fillMaxWidth()) {
                     if (checking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Text("بررسی دستی بروزرسانی", fontFamily = Fa)
