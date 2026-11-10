@@ -329,6 +329,7 @@ fun PregnancyApp(){
         if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true; hasPregnancyDating=true}
         if(prefs[JourneyStageKey]!=null) hasProfile=true
         journeyStage=prefs[JourneyStageKey] ?: if(saved!=null) STAGE_PREGNANT else STAGE_PLANNING
+        hasPregnancyDating=saved!=null && ! (prefs[DatingPendingKey] ?: false) && journeyStage in listOf(STAGE_POSITIVE, STAGE_PREGNANT)
         datingMethod=prefs[DatingMethodKey] ?: DATING_LMP
         journeyDate=prefs[DatingReferenceDateKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()} ?: LocalDate.now()
         gestationalWeeks=prefs[DatingWeeksKey] ?: "8"
@@ -626,7 +627,6 @@ fun PregnancyApp(){
                                     it[JourneyStageKey]=journeyStage
                                     it[CycleLengthKey]=cycleLength.toString()
                                     it[DatingPendingKey]=false
-                                    it.remove(DueKey)
                                 }}
                                 onboardingStage="done"
                             },
@@ -648,7 +648,7 @@ fun PregnancyApp(){
                                     it[DatingDaysKey]=gestationalDays
                                     it[DatingEmbryoAgeKey]=embryoAgeDays.toString()
                                     it[DatingPendingKey]=datingPending
-                                    if(estimated!=null) it[DueKey]=estimated.toString() else it.remove(DueKey)
+                                    if(estimated!=null) it[DueKey]=estimated.toString()
                                     it[CycleLengthKey]=cycleLength.toString()
                                 }
                                 if(estimated!=null){
