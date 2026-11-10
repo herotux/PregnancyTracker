@@ -7,7 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -73,7 +73,8 @@ internal fun ReproductiveJourneyScreen(
     onContinueCycle: () -> Unit,
     onContinuePregnancy: () -> Unit,
     onBack: () -> Unit
-) {
+ ) {
+    var pendingStage by remember { mutableStateOf<String?>(null) }
     val possible = stage == STAGE_POSSIBLE
     val pregnant = stage in listOf(STAGE_POSITIVE, STAGE_PREGNANT)
     LazyColumn(
@@ -94,13 +95,13 @@ internal fun ReproductiveJourneyScreen(
         }
         if (!pregnant && !possible) {
             item { Text("الان در کدام مرحله هستی؟", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
-            item { JourneyOption("در حال برنامه‌ریزی برای بارداری", "آمادگی پیش از بارداری و نکات مهم", Icons.Default.Favorite, stage == STAGE_PLANNING) { onStage(STAGE_PLANNING) } }
-            item { JourneyOption("فقط می‌خواهم چرخه قاعدگی را ثبت کنم", "ثبت قاعدگی و مشاهده پیش‌بینی چرخه", Icons.Default.CalendarMonth, stage == STAGE_CYCLE) { onStage(STAGE_CYCLE) } }
-            item { JourneyOption("برای بارداری تلاش می‌کنم", "پنجره باروری و تخمین زمان تخمک‌گذاری", Icons.Default.Spa, stage == STAGE_TTC) { onStage(STAGE_TTC) } }
-            item { JourneyOption("احتمال می‌دهم باردار باشم", "هنوز تست نداده‌ام یا نتیجه مشخص نیست", Icons.Default.HelpOutline, stage == STAGE_POSSIBLE) { onStage(STAGE_POSSIBLE) } }
-            item { JourneyOption("تست بارداری‌ام مثبت شده", "برای ثبت اطلاعات و تعیین سن بارداری", Icons.Default.HealthAndSafety, stage == STAGE_POSITIVE) { onStage(STAGE_POSITIVE) } }
-            item { JourneyOption("بارداری با پزشک یا سونوگرافی تأیید شده", "ثبت سن بارداری بر اساس اطلاعات پزشکی", Icons.Default.MedicalServices, stage == STAGE_PREGNANT) { onStage(STAGE_PREGNANT) } }
-            item { JourneyOption("دوران پس از زایمان", "پیگیری سلامت مادر و بازگشت چرخه", Icons.Default.ChildCare, stage == STAGE_POSTPARTUM) { onStage(STAGE_POSTPARTUM) } }
+            item { JourneyOption("در حال برنامه‌ریزی برای بارداری", "آمادگی پیش از بارداری و نکات مهم", Icons.Default.Favorite, stage == STAGE_PLANNING) { pendingStage = STAGE_PLANNING } }
+            item { JourneyOption("فقط می‌خواهم چرخه قاعدگی را ثبت کنم", "ثبت قاعدگی و مشاهده پیش‌بینی چرخه", Icons.Default.CalendarMonth, stage == STAGE_CYCLE) { pendingStage = STAGE_CYCLE } }
+            item { JourneyOption("برای بارداری تلاش می‌کنم", "پنجره باروری و تخمین زمان تخمک‌گذاری", Icons.Default.Spa, stage == STAGE_TTC) { pendingStage = STAGE_TTC } }
+            item { JourneyOption("احتمال می‌دهم باردار باشم", "هنوز تست نداده‌ام یا نتیجه مشخص نیست", Icons.Default.HelpOutline, stage == STAGE_POSSIBLE) { pendingStage = STAGE_POSSIBLE } }
+            item { JourneyOption("تست بارداری‌ام مثبت شده", "برای ثبت اطلاعات و تعیین سن بارداری", Icons.Default.HealthAndSafety, stage == STAGE_POSITIVE) { pendingStage = STAGE_POSITIVE } }
+            item { JourneyOption("بارداری با پزشک یا سونوگرافی تأیید شده", "ثبت سن بارداری بر اساس اطلاعات پزشکی", Icons.Default.MedicalServices, stage == STAGE_PREGNANT) { pendingStage = STAGE_PREGNANT } }
+            item { JourneyOption("دوران پس از زایمان", "پیگیری سلامت مادر و بازگشت چرخه", Icons.Default.ChildCare, stage == STAGE_POSTPARTUM) { pendingStage = STAGE_POSTPARTUM } }
             item {
                 Button(
                     onClick = { if (stage in listOf(STAGE_PLANNING, STAGE_CYCLE, STAGE_TTC, STAGE_POSTPARTUM)) onContinueCycle() else onContinuePregnancy() },
@@ -227,6 +228,23 @@ internal fun ReproductiveJourneyScreen(
         }
         item { StageHistorySection() }
         item { TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("بازگشت", fontFamily = Fa) } }
+    }
+    pendingStage?.let { selected ->
+        AlertDialog(
+            onDismissRequest = { pendingStage = null },
+            title = { Text("تأیید تغییر مرحله", fontFamily = Fa, fontWeight = FontWeight.Bold) },
+            text = { Text("مرحله مسیر به «" + when (selected) {
+                STAGE_PLANNING -> "برنامه‌ریزی برای بارداری"
+                STAGE_CYCLE -> "ثبت چرخه قاعدگی"
+                STAGE_TTC -> "تلاش برای بارداری"
+                STAGE_POSSIBLE -> "احتمال بارداری"
+                STAGE_POSITIVE -> "تست مثبت"
+                STAGE_PREGNANT -> "بارداری تأییدشده"
+                else -> "پس از زایمان"
+            } + "» تغییر کند؟ سوابق مراحل قبلی و اطلاعات ثبت‌شده پاک نمی‌شوند.", fontFamily = Fa, lineHeight = 21.sp) },
+            confirmButton = { Button(onClick = { onStage(selected); pendingStage = null }) { Text("تأیید", fontFamily = Fa) } },
+            dismissButton = { TextButton(onClick = { pendingStage = null }) { Text("انصراف", fontFamily = Fa) } }
+        )
     }
 }
 
