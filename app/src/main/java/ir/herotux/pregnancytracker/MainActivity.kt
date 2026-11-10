@@ -292,6 +292,8 @@ fun PregnancyApp(){
     var embryoAgeDays by remember{mutableIntStateOf(5)}
     var datePickerTarget by remember{mutableStateOf("due")}
     var screen by remember{mutableIntStateOf(0)}
+    var activeConversation by remember{mutableStateOf<NonoConversation?>(null)}
+    var activeOtherProfile by remember{mutableStateOf<NonoPublicProfile?>(null)}
     var calendarMonth by remember{mutableStateOf(LocalDate.now().withDayOfMonth(1))}
     var selectedDate by remember{mutableStateOf(LocalDate.now())}
     var note by remember{mutableStateOf("")}
@@ -358,6 +360,7 @@ fun PregnancyApp(){
         if(reminderEnabled) scheduleWeeklyReminder(context)
         driveEmail=DriveSync.connectedEmail(context)
         if(driveEmail!=null) syncStatus="اتصال به Google Drive فعال است"
+        FirebaseAuth.getInstance().currentUser?.let { signedInUser -> runCatching { NonoMessaging.ensureProfile(signedInUser) } }
         val profilePrefs=context.pregnancyStore.data.first()
         userRole=profilePrefs[UserRoleKey]
         familyId=profilePrefs[FamilyIdKey]
@@ -485,6 +488,7 @@ fun PregnancyApp(){
                     FirebaseAuth.getInstance().signInWithCredential(firebaseCredential)
                         .addOnSuccessListener { authResult ->
                             firebaseEmail = authResult.user?.email
+                            authResult.user?.let { signedInUser -> scope.launch { runCatching { NonoMessaging.ensureProfile(signedInUser) } } }
                             authBusy = false
                             authError = null
                             syncStatus = "ورود با Google انجام شد: " + (firebaseEmail ?: "حساب متصل")
@@ -780,18 +784,24 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";9->"پیام‌ها";10->"پروفایل من";11->"اعلان‌ها";12->"گفت‌وگو";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={
-                            if(screen==7 || screen==8) IconButton({screen=if(screen==8) 0 else 4}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
+                            if(screen in 7..12) IconButton({screen=when(screen){7->4;8->0;else->9}}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
                             else IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}
                         },
-                        actions={IconButton({screen=4}){Icon(Icons.Default.Settings,null)}},
+                        actions={
+                            Row {
+                                IconButton({screen=11}) { Icon(Icons.Default.NotificationsNone,contentDescription="اعلان‌ها") }
+                                IconButton({screen=10}) { Icon(Icons.Default.AccountCircle,contentDescription="پروفایل") }
+                                IconButton({screen=4}) { Icon(Icons.Default.Settings,contentDescription="تنظیمات") }
+                            }
+                        },
                         colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
                     )
                 },
                 bottomBar={
                     NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=3.dp){
-                        listOf("خانه" to Icons.Default.Home,"هفته جاری" to Icons.Default.Today,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings)
+                        listOf("خانه" to Icons.Default.Home,"هفته جاری" to Icons.Default.Today,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings,"پیام‌ها" to Icons.Default.MailOutline)
                             .forEachIndexed{i,(label,icon)->
                                 NavigationBarItem(selected=screen==i,onClick={screen=i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
                             }
@@ -874,6 +884,27 @@ fun PregnancyApp(){
                     6->WeeksModern(age.first,pad){selectedWeek=it}
                     7->AboutModern(pad)
                     8->BabyNamesScreen(savedLists=babyNameLists,onSave={saveBabyNames(it)},pad=pad)
+                    9->MessagingCenterScreen(
+                        uid=FirebaseAuth.getInstance().currentUser?.uid,
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        onProfile={screen=10},
+                        onSignIn={signInFirebaseWithGoogle()},
+                        onNotifications={screen=11}
+                    )
+                    10->NonoProfileScreen(uid=FirebaseAuth.getInstance().currentUser?.uid,onBack={screen=9},onSignIn={signInFirebaseWithGoogle()})
+                    11->NonoNotificationsScreen(
+                        uid=FirebaseAuth.getInstance().currentUser?.uid,
+                        onBack={screen=9},
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12}
+                    )
+                    12->{
+                        val conversation=activeConversation
+                        val other=activeOtherProfile
+                        val currentUid=FirebaseAuth.getInstance().currentUser?.uid
+                        if(conversation!=null && other!=null && currentUid!=null)
+                            NonoChatThreadScreen(currentUid,conversation,other,onBack={screen=9})
+                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11})
+                    }
                 }
             }
         }
