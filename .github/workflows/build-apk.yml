@@ -29,6 +29,22 @@ jobs:
           done
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace --no-daemon
+      - name: Print Android debug SHA-1 for Firebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$HOME/.android/debug.keystore"
+          test -f "$KEYSTORE"
+          SHA1="$(keytool -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey | awk -F': ' '/SHA1:/{print $2; exit}')"
+          test -n "$SHA1"
+          echo "Android debug SHA-1: $SHA1"
+          {
+            echo "## Firebase Android fingerprint"
+            echo ""
+            echo "- Package: `ir.herotux.pregnancytracker`"
+            echo "- Build: Debug"
+            echo "- SHA-1: `$SHA1`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: PregnancyTracker-debug-apk
