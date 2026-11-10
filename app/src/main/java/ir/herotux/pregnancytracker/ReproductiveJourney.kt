@@ -264,6 +264,10 @@ internal fun CycleModeScreen(
     preconceptionDone: Set<Int>,
     onPreconceptionToggle: (Int, Boolean) -> Unit
 ) {
+    if (stage == STAGE_POSTPARTUM) {
+        PostpartumCareScreen()
+        return
+    }
     val observedLength = calculatedCycleLength(cycleLogs) ?: cycleLength
     val predictionStart = detectedPeriodStarts(cycleLogs).lastOrNull() ?: lastPeriod
     val nextPeriod = predictionStart?.plusDays(observedLength.toLong())
