@@ -225,6 +225,7 @@ internal fun ReproductiveJourneyScreen(
                 ) { Text(if (datingMethod == DATING_UNKNOWN) "ادامه بدون تاریخ‌گذاری" else "ثبت اطلاعات و ادامه", fontFamily = Fa, fontWeight = FontWeight.Bold) }
             }
         }
+        item { StageHistorySection() }
         item { TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("بازگشت", fontFamily = Fa) } }
     }
 }
