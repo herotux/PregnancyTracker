@@ -646,7 +646,7 @@ fun PregnancyApp(){
                                 scope.launch{context.pregnancyStore.edit{
                                     it[JourneyStageKey]=journeyStage
                                     it[DatingMethodKey]=effectiveMethod
-                                    it[DatingReferenceDateKey]=journeyDate.toString()
+                                    if(journeyDateSelected) it[DatingReferenceDateKey]=journeyDate.toString() else it.remove(DatingReferenceDateKey)
                                     it[DatingWeeksKey]=gestationalWeeks
                                     it[DatingDaysKey]=gestationalDays
                                     it[DatingEmbryoAgeKey]=embryoAgeDays.toString()
