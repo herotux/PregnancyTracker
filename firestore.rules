@@ -28,6 +28,7 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
           && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.members[request.auth.uid] in ['mother', 'father']
+          && resource.data.members.size() < 2
           && request.resource.data.members.size() == resource.data.members.size() + 1)
       );
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
