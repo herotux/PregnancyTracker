@@ -83,6 +83,10 @@ private val DatingMethodKey = stringPreferencesKey("pregnancy_dating_method")
 private val DatingPendingKey = booleanPreferencesKey("pregnancy_dating_pending")
 private val LastPeriodKey = stringPreferencesKey("cycle_last_period")
 private val CycleLengthKey = stringPreferencesKey("cycle_length")
+private val DatingReferenceDateKey = stringPreferencesKey("pregnancy_dating_reference_date")
+private val DatingWeeksKey = stringPreferencesKey("pregnancy_dating_weeks")
+private val DatingDaysKey = stringPreferencesKey("pregnancy_dating_days")
+private val DatingEmbryoAgeKey = stringPreferencesKey("pregnancy_dating_embryo_age")
 private val ThemeKey = stringPreferencesKey("theme_mode")
 private val ReminderKey = booleanPreferencesKey("weekly_reminder_enabled")
 private val UserRoleKey = stringPreferencesKey("user_role")
@@ -326,6 +330,10 @@ fun PregnancyApp(){
         if(prefs[JourneyStageKey]!=null) hasProfile=true
         journeyStage=prefs[JourneyStageKey] ?: if(saved!=null) STAGE_PREGNANT else STAGE_PLANNING
         datingMethod=prefs[DatingMethodKey] ?: DATING_LMP
+        journeyDate=prefs[DatingReferenceDateKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()} ?: LocalDate.now()
+        gestationalWeeks=prefs[DatingWeeksKey] ?: "8"
+        gestationalDays=prefs[DatingDaysKey] ?: "0"
+        embryoAgeDays=(prefs[DatingEmbryoAgeKey]?.toIntOrNull() ?: 5).coerceIn(3,6)
         datingPending=prefs[DatingPendingKey] ?: false
         cycleLength=(prefs[CycleLengthKey]?.toIntOrNull() ?: 28).coerceIn(21,45)
         lastPeriod=prefs[LastPeriodKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()}
@@ -635,6 +643,10 @@ fun PregnancyApp(){
                                 scope.launch{context.pregnancyStore.edit{
                                     it[JourneyStageKey]=journeyStage
                                     it[DatingMethodKey]=effectiveMethod
+                                    it[DatingReferenceDateKey]=journeyDate.toString()
+                                    it[DatingWeeksKey]=gestationalWeeks
+                                    it[DatingDaysKey]=gestationalDays
+                                    it[DatingEmbryoAgeKey]=embryoAgeDays.toString()
                                     it[DatingPendingKey]=datingPending
                                     if(estimated!=null) it[DueKey]=estimated.toString() else it.remove(DueKey)
                                     it[CycleLengthKey]=cycleLength.toString()
