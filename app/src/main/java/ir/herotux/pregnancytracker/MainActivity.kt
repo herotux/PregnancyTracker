@@ -1477,8 +1477,8 @@ fun SettingsModern(
         item{
             SettingTile(
                 if(firebaseEmail==null) Icons.Default.Login else Icons.Default.AccountCircle,
-                if(firebaseEmail==null) "ورود و همگام‌سازی با Gmail" else "حساب Firebase متصل",
-                firebaseEmail ?: "ورود امن با حساب Google برای همگام‌سازی بین دستگاه‌ها"
+                if(firebaseEmail==null) "ورود با حساب Gmail" else "حساب Firebase متصل",
+                firebaseEmail ?: "ورود امن Google؛ همگام‌سازی ابری در مرحله بعد فعال می‌شود"
             ){if(firebaseEmail==null) onFirebaseSignIn() else onFirebaseSignOut()}
         }
         item{SettingTile(Icons.Default.Language,"تقویم","تقویم و تاریخ‌ها به‌صورت شمسی"){}}
