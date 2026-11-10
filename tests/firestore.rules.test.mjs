@@ -223,3 +223,80 @@ test("unrelated users cannot read a patient's care request", async () => {
   const outsiderDb = env.authenticatedContext("outsider-uid").firestore();
   await assertFails(getDoc(doc(outsiderDb, "careRequests/request-3")));
 });
+
+
+test("authenticated users can read public profiles but cannot edit another user's profile", async () => {
+  const ownerDb = env.authenticatedContext("profile-owner").firestore();
+  await assertSucceeds(setDoc(doc(ownerDb, "publicProfiles/profile-owner"), {
+    uid: "profile-owner",
+    displayName: "کاربر نمونه",
+    username: "sample_user",
+    photoUrl: null,
+    avatarKey: "🌸",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+  const otherDb = env.authenticatedContext("profile-viewer").firestore();
+  await assertSucceeds(getDoc(doc(otherDb, "publicProfiles/profile-owner")));
+  await assertFails(updateDoc(doc(otherDb, "publicProfiles/profile-owner"), {
+    displayName: "تغییر غیرمجاز",
+  }));
+});
+
+test("username reservations are private lookups and cannot be claimed by another user", async () => {
+  const ownerDb = env.authenticatedContext("profile-owner").firestore();
+  await assertSucceeds(setDoc(doc(ownerDb, "usernames/sample_user"), {
+    uid: "profile-owner",
+    createdAt: new Date(),
+  }));
+  const otherDb = env.authenticatedContext("profile-viewer").firestore();
+  await assertSucceeds(getDoc(doc(otherDb, "usernames/sample_user")));
+  await assertFails(setDoc(doc(otherDb, "usernames/sample_user"), {
+    uid: "profile-viewer",
+    createdAt: new Date(),
+  }));
+  await assertFails(getDocs(collection(otherDb, "usernames")));
+});
+
+test("private conversations and messages are visible only to their two members", async () => {
+  const senderDb = env.authenticatedContext("sender-uid").firestore();
+  const conversationRef = doc(senderDb, "conversations/sender-uid_recipient-uid");
+  await assertSucceeds(setDoc(conversationRef, {
+    members: ["recipient-uid", "sender-uid"],
+    lastMessage: "",
+    lastSenderId: "",
+    unreadBy: { "sender-uid": 0, "recipient-uid": 0 },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+  await assertSucceeds(setDoc(doc(senderDb, "conversations/sender-uid_recipient-uid/messages/message-1"), {
+    senderId: "sender-uid",
+    text: "سلام",
+    createdAt: new Date(),
+  }));
+  const recipientDb = env.authenticatedContext("recipient-uid").firestore();
+  await assertSucceeds(getDoc(doc(recipientDb, "conversations/sender-uid_recipient-uid")));
+  await assertSucceeds(getDoc(doc(recipientDb, "conversations/sender-uid_recipient-uid/messages/message-1")));
+  const outsiderDb = env.authenticatedContext("outsider-uid").firestore();
+  await assertFails(getDoc(doc(outsiderDb, "conversations/sender-uid_recipient-uid")));
+  await assertFails(getDoc(doc(outsiderDb, "conversations/sender-uid_recipient-uid/messages/message-1")));
+});
+
+test("a user cannot send a message pretending to be another participant", async () => {
+  const senderDb = env.authenticatedContext("sender-uid").firestore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "conversations/sender-uid_recipient-uid"), {
+      members: ["sender-uid", "recipient-uid"],
+      lastMessage: "",
+      lastSenderId: "",
+      unreadBy: { "sender-uid": 0, "recipient-uid": 0 },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
+  await assertFails(setDoc(doc(senderDb, "conversations/sender-uid_recipient-uid/messages/forged"), {
+    senderId: "recipient-uid",
+    text: "پیام جعلی",
+    createdAt: new Date(),
+  }));
+});
