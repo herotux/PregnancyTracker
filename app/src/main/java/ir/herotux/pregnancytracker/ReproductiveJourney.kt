@@ -42,8 +42,11 @@ internal fun estimatePregnancyDueDate(
     DATING_LMP -> referenceDate.plusDays((280 + cycleLength.coerceIn(21, 45) - 28).toLong())
     DATING_OVULATION -> referenceDate.plusDays(266)
     DATING_ULTRASOUND -> {
-        val ageDays = gestationalWeeks.coerceIn(0, 42) * 7 + gestationalDays.coerceIn(0, 6)
-        if (ageDays > 294) null else referenceDate.plusDays((280 - ageDays).toLong())
+        if (gestationalWeeks !in 4..42 || gestationalDays !in 0..6) null
+        else {
+            val ageDays = gestationalWeeks * 7 + gestationalDays
+            if (ageDays > 294) null else referenceDate.plusDays((280 - ageDays).toLong())
+        }
     }
     DATING_IVF -> referenceDate.plusDays((266 - embryoAgeDays.coerceIn(3, 6)).toLong())
     DATING_CLINICIAN -> referenceDate
@@ -80,7 +83,8 @@ internal fun ReproductiveJourneyScreen(
         item {
             Text("نونو؛ همراه مسیر باروری و سلامت", fontFamily = Fa, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold)
             Text(
-                if (!pregnant) "از برنامه‌ریزی و شناخت چرخه تا بارداری، نونو همراهت است. هر زمان خواستی می‌توانی مرحله را تغییر بدهی."
+                if (!pregnant && !possible) "از برنامه‌ریزی و شناخت چرخه تا بارداری، نونو همراهت است. هر زمان خواستی می‌توانی مرحله را تغییر بدهی."
+                else if (possible) "اگر احتمال بارداری می‌دهی، ابتدا باید آن را تأیید کنی؛ نونو بدون تأیید، هفته بارداری محاسبه نمی‌کند."
                 else "برای برآورد سن بارداری، روشی را انتخاب کن که اطلاعات دقیق‌تری از آن داری. لازم نیست همه اطلاعات را بدانی.",
                 fontFamily = Fa, fontSize = 13.sp, lineHeight = 21.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -213,7 +217,7 @@ internal fun ReproductiveJourneyScreen(
                 Button(
                     onClick = onContinuePregnancy,
                     enabled = datingMethod == DATING_UNKNOWN ||
-                        (datingMethod == DATING_ULTRASOUND && (gestationalWeeks.toIntOrNull() ?: -1) in 0..42 && (gestationalDays.toIntOrNull() ?: -1) in 0..6) ||
+                        (datingMethod == DATING_ULTRASOUND && (gestationalWeeks.toIntOrNull() ?: -1) in 4..42 && (gestationalDays.toIntOrNull() ?: -1) in 0..6) ||
                         (datingMethod == DATING_LMP && (cycleLength.toIntOrNull() ?: 28) in 21..45) ||
                         datingMethod in listOf(DATING_OVULATION, DATING_IVF, DATING_CLINICIAN),
                     modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)
