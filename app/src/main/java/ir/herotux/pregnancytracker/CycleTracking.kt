@@ -185,6 +185,139 @@ internal fun CycleLogSection(
     }
 }
 
+
+private fun fullFlowDates(logs: List<CycleDayLog>): List<LocalDate> =
+    logs.filter { it.bleeding in setOf("light", "medium", "heavy") }.mapNotNull { it.localDate }.distinct().sorted()
+
+internal fun detectedPeriodStarts(logs: List<CycleDayLog>): List<LocalDate> {
+    val dates = fullFlowDates(logs)
+    if (dates.isEmpty()) return emptyList()
+    val episodes = mutableListOf<MutableList<LocalDate>>()
+    dates.forEach { date ->
+        val episode = episodes.lastOrNull()
+        if (episode == null || java.time.temporal.ChronoUnit.DAYS.between(episode.last(), date) > 2L) episodes.add(mutableListOf(date))
+        else episode.add(date)
+    }
+    return episodes.map { it.first() }
+}
+
+internal fun observedCycleLengths(logs: List<CycleDayLog>): List<Int> =
+    detectedPeriodStarts(logs).zipWithNext { a, b -> java.time.temporal.ChronoUnit.DAYS.between(a, b).toInt() }.filter { it in 15..90 }
+
+internal fun calculatedCycleLength(logs: List<CycleDayLog>): Int? {
+    val values = observedCycleLengths(logs).takeLast(6).sorted()
+    if (values.isEmpty()) return null
+    val mid = values.size / 2
+    return (if (values.size % 2 == 1) values[mid] else (values[mid - 1] + values[mid]) / 2).coerceIn(15, 90)
+}
+
+@Composable
+internal fun CycleHistoryEditor(logs: List<CycleDayLog>, onSave: (CycleDayLog) -> Unit, onDelete: (String) -> Unit) {
+    var date by remember { mutableStateOf(LocalDate.now().minusDays(1)) }
+    var showDate by remember { mutableStateOf(false) }
+    var bleeding by remember { mutableStateOf("none") }
+    var lh by remember { mutableStateOf("none") }
+    var bbt by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    val existing = logs.firstOrNull { it.date == date.toString() }
+    LaunchedEffect(date, existing) {
+        bleeding = existing?.bleeding ?: "none"; lh = existing?.lhResult ?: "none"
+        bbt = existing?.basalTemperature ?: ""; note = existing?.note ?: ""
+    }
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("افزودن یا ویرایش روزهای گذشته", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            OutlinedButton(onClick = { showDate = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.CalendarMonth, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(jalali(date), fontFamily = Fa)
+            }
+            Text("شدت خون‌ریزی", fontFamily = Fa, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                listOf("none" to "ندارد", "spotting" to "لکه‌بینی", "light" to "کم", "medium" to "متوسط", "heavy" to "زیاد").forEach { (key, label) ->
+                    FilterChip(selected = bleeding == key, onClick = { bleeding = key }, label = { Text(label, fontFamily = Fa, fontSize = 10.sp) })
+                }
+            }
+            Text("تست LH", fontFamily = Fa, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                listOf("none" to "ندادم", "negative" to "منفی", "positive" to "مثبت", "peak" to "اوج").forEach { (key, label) ->
+                    FilterChip(selected = lh == key, onClick = { lh = key }, label = { Text(label, fontFamily = Fa, fontSize = 10.sp) })
+                }
+            }
+            OutlinedTextField(value = bbt, onValueChange = { bbt = it.filter { ch -> ch.isDigit() || ch == '.' }.take(5) }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("دمای پایه بدن °C", fontFamily = Fa) })
+            OutlinedTextField(value = note, onValueChange = { note = it.take(300) }, modifier = Modifier.fillMaxWidth(), label = { Text("یادداشت", fontFamily = Fa) })
+            Button(onClick = { onSave(CycleDayLog(date.toString(), bleeding, existing?.symptoms ?: emptyList(), existing?.cervicalMucus ?: "unknown", lh, bbt, note)) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (existing == null) "ذخیره روز گذشته" else "به‌روزرسانی روز گذشته", fontFamily = Fa)
+            }
+            if (existing != null) TextButton(onClick = { onDelete(date.toString()) }, modifier = Modifier.align(Alignment.End)) {
+                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error); Text("حذف این روز", fontFamily = Fa, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+    if (showDate) DateDialogModern(date, { date = it; showDate = false }, { showDate = false })
+}
+
+@Composable
+internal fun CycleAnalyticsSection(logs: List<CycleDayLog>) {
+    val starts = detectedPeriodStarts(logs)
+    val lengths = observedCycleLengths(logs)
+    val median = calculatedCycleLength(logs)
+    val temperatures = logs.mapNotNull { log ->
+        val day = log.localDate ?: return@mapNotNull null
+        val value = log.basalTemperature.toFloatOrNull() ?: return@mapNotNull null
+        if (value in 34f..42f) day to value else null
+    }.sortedBy { it.first }.takeLast(14)
+    val lhLogs = logs.filter { it.lhResult != "none" }.sortedByDescending { it.date }.take(8)
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("تاریخچه و روند چرخه", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(Modifier.weight(1f), shape = RoundedCornerShape(12.dp), color = Blush) {
+                    Column(Modifier.padding(10.dp)) { Text("شروع قاعدگی", fontFamily = Fa, fontSize = 10.sp, color = RoseDark); Text(fa(starts.size.toString()), fontFamily = Fa, fontWeight = FontWeight.Bold, color = RoseDark) }
+                }
+                Surface(Modifier.weight(1f), shape = RoundedCornerShape(12.dp), color = Blush) {
+                    Column(Modifier.padding(10.dp)) { Text("میانه طول چرخه", fontFamily = Fa, fontSize = 10.sp, color = RoseDark); Text(median?.let { fa(it.toString()) + " روز" } ?: "داده کافی نیست", fontFamily = Fa, fontWeight = FontWeight.Bold, color = RoseDark) }
+                }
+            }
+            Text("شروع چرخه از اولین روز خون‌ریزی کامل محاسبه می‌شود؛ لکه‌بینی شروع چرخه نیست. برای محاسبه فاصله چرخه حداقل دو شروع ثبت‌شده لازم است.", fontFamily = Fa, fontSize = 10.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (lengths.isNotEmpty()) {
+                Text("فاصله چرخه‌های ثبت‌شده (روز)", fontFamily = Fa, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                CycleTrendBars(lengths.takeLast(8).map { it.toFloat() }, 15f, 90f)
+                Text(lengths.takeLast(6).joinToString("، ") { fa(it.toString()) + " روز" }, fontFamily = Fa, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (temperatures.isNotEmpty()) {
+                HorizontalDivider()
+                Text("دمای پایه بدن؛ ۱۴ ثبت اخیر", fontFamily = Fa, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                CycleTrendBars(temperatures.map { it.second }, 35f, 38f)
+                Text("کمینه ${fa("%.2f".format(java.util.Locale.US, temperatures.minOf { it.second }))}° و بیشینه ${fa("%.2f".format(java.util.Locale.US, temperatures.maxOf { it.second }))}°", fontFamily = Fa, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (lhLogs.isNotEmpty()) {
+                HorizontalDivider(); Text("تست‌های اخیر LH", fontFamily = Fa, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                lhLogs.forEach { log ->
+                    val label = when (log.lhResult) { "negative" -> "منفی"; "positive" -> "مثبت"; "peak" -> "اوج"; else -> log.lhResult }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(log.localDate?.let(::jalali) ?: log.date, fontFamily = Fa, fontSize = 11.sp)
+                        Text(label, fontFamily = Fa, fontWeight = FontWeight.SemiBold, color = RoseDark, fontSize = 11.sp)
+                    }
+                }
+            }
+            Text("این داده‌ها الگوهای ثبت‌شده را نمایش می‌دهند و به‌تنهایی تخمک‌گذاری را تشخیص نمی‌دهند.", fontFamily = Fa, fontSize = 10.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun CycleTrendBars(values: List<Float>, minValue: Float, maxValue: Float) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(86.dp)) {
+        if (values.isEmpty()) return@Canvas
+        val gap = 8.dp.toPx()
+        val barWidth = ((size.width - gap * (values.size - 1)) / values.size).coerceAtLeast(2f)
+        values.forEachIndexed { index, value ->
+            val fraction = ((value - minValue) / (maxValue - minValue)).coerceIn(0f, 1f)
+            val barHeight = fraction * (size.height - 8.dp.toPx())
+            drawRoundRect(Rose.copy(alpha = 0.85f), topLeft = androidx.compose.ui.geometry.Offset(index * (barWidth + gap), size.height - barHeight), size = androidx.compose.ui.geometry.Size(barWidth, barHeight), cornerRadius = androidx.compose.ui.geometry.CornerRadius(5.dp.toPx()))
+        }
+    }
+}
+
 internal val preconceptionChecklist = listOf(
     "برای مشاوره پیش از بارداری وقت گرفته‌ام",
     "داروها و مکمل‌ها را با پزشک یا داروساز مرور کرده‌ام",
