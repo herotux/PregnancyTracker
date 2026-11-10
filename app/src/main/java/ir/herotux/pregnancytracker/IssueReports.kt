@@ -174,7 +174,7 @@ fun IssueReportScreen(uid: String?, onBack: () -> Unit, onSignIn: () -> Unit) {
                     Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(report.title, fontFamily = Fa, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            AssistChip(onClick = {}, label = { Text(when(report.status) { "reviewing" -> "در حال بررسی"; "resolved" -> "بررسی شد"; "closed" -> "بسته شد"; else -> "ثبت‌شده" }, fontFamily = Fa, fontSize = 10.sp) })
+                            Surface(color = Blush, shape = RoundedCornerShape(50.dp)) { Text(when(report.status) { "reviewing" -> "در حال بررسی"; "resolved" -> "بررسی شد"; "closed" -> "بسته شد"; else -> "ثبت‌شده" }, fontFamily = Fa, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) }
                         }
                         Text(when(report.category) { "suggestion" -> "پیشنهاد"; "other" -> "سایر"; else -> "گزارش خطا" }, fontFamily = Fa, fontSize = 11.sp, color = RoseDark)
                         Text(report.description, fontFamily = Fa, fontSize = 12.sp, maxLines = 3)
