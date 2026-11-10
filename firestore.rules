@@ -62,6 +62,34 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
+    // User-submitted issue reports. Users can create and read only their own reports.
+    match /issueReports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'title', 'category', 'description', 'appVersion',
+          'versionCode', 'androidVersion', 'device', 'status', 'createdAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 4
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.category in ['bug', 'suggestion', 'other']
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 10
+        && request.resource.data.description.size() <= 3000
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() <= 30
+        && request.resource.data.versionCode is int
+        && request.resource.data.androidVersion is string
+        && request.resource.data.androidVersion.size() <= 30
+        && request.resource.data.device is string
+        && request.resource.data.device.size() <= 120
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time;
+      allow get, list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // Private one-to-one conversations. Both participants can read the thread.
     match /conversations/{conversationId} {
       allow get, list: if signedIn() && request.auth.uid in resource.data.members;
