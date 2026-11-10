@@ -142,7 +142,7 @@ fun IssueReportScreen(uid: String?, onBack: () -> Unit, onSignIn: () -> Unit) {
                             onClick = {
                                 busy = true; error = null; message = null
                                 val info = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
-                                val versionCode = if (Build.VERSION.SDK_INT >= 28) info?.longVersionCode ?: 1L else @Suppress("DEPRECATION") (info?.versionCode ?: 1).toLong()
+                                val versionCode = (info?.versionCode ?: 1).toLong()
                                 scope.launch {
                                     runCatching {
                                         NonoIssueReports.submit(uid, title, category, description, BuildConfig.VERSION_NAME, versionCode, "${Build.MANUFACTURER} ${Build.MODEL}")
