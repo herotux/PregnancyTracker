@@ -49,10 +49,16 @@ import java.time.temporal.ChronoUnit
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
 import androidx.work.CoroutineWorker
@@ -252,6 +258,7 @@ fun PregnancyApp(){
     val context=androidx.compose.ui.platform.LocalContext.current
     val activity=context as Activity
     val scope=rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
     var due by remember{mutableStateOf(LocalDate.now())}
     var loaded by remember{mutableStateOf(false)}
     var hasProfile by remember{mutableStateOf(false)}
@@ -365,29 +372,62 @@ fun PregnancyApp(){
         scope.launch{context.pregnancyStore.edit{it[ThemeKey]=mode}}
     }
 
-    val firebaseSignInLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
-        if(result.resultCode==Activity.RESULT_OK && result.data!=null){
-            runCatching{GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(com.google.android.gms.common.api.ApiException::class.java)}
-                .onSuccess{account->
-                    val token=account.idToken
-                    if(token.isNullOrBlank()) syncStatus="توکن ورود Google دریافت نشد؛ SHA-1 و OAuth را بررسی کن"
-                    else FirebaseAuth.getInstance().signInWithCredential(GoogleAuthProvider.getCredential(token,null))
-                        .addOnSuccessListener{authResult->
-                            firebaseEmail=authResult.user?.email
-                            syncStatus="ورود Firebase با Gmail انجام شد؛ همگام‌سازی ابری هنوز نیازمند تکمیل است"
-                        }
-                        .addOnFailureListener{syncStatus="ورود Firebase ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
-                }
-                .onFailure{syncStatus="ورود Google ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
-        }else syncStatus="ورود Google لغو شد"
+    suspend fun requestGoogleCredential(filterAuthorizedAccounts: Boolean): androidx.credentials.Credential {
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setServerClientId(context.getString(R.string.default_web_client_id))
+            .setFilterByAuthorizedAccounts(filterAuthorizedAccounts)
+            .build()
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+        return credentialManager.getCredential(
+            context = activity,
+            request = request
+        ).credential
     }
 
-    fun signInFirebaseWithGoogle(){
-        val options=GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestIdToken(context.getString(R.string.default_web_client_id))
-            .build()
-        firebaseSignInLauncher.launch(GoogleSignIn.getClient(activity,options).signInIntent)
+    fun signInFirebaseWithGoogle() {
+        scope.launch {
+            try {
+                val googleCredential = try {
+                    requestGoogleCredential(filterAuthorizedAccounts = true)
+                } catch (_: NoCredentialException) {
+                    requestGoogleCredential(filterAuthorizedAccounts = false)
+                }
+
+                if (googleCredential is CustomCredential &&
+                    googleCredential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                ) {
+                    val idToken = GoogleIdTokenCredential.createFrom(googleCredential.data).idToken
+                    val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
+                    FirebaseAuth.getInstance().signInWithCredential(firebaseCredential)
+                        .addOnSuccessListener { authResult ->
+                            firebaseEmail = authResult.user?.email
+                            syncStatus = "ورود Firebase با Gmail انجام شد؛ همگام‌سازی ابری هنوز نیازمند تکمیل است"
+                        }
+                        .addOnFailureListener { error ->
+                            syncStatus = "ورود Firebase ناموفق بود: " + (error.message ?: "خطای ناشناخته")
+                        }
+                } else {
+                    syncStatus = "نوع حساب Google پشتیبانی نمی‌شود؛ دوباره تلاش کن"
+                }
+            } catch (error: Exception) {
+                syncStatus = "ورود Google ناموفق بود: " + (error.localizedMessage ?: "خطای ناشناخته")
+            }
+        }
+    }
+
+    fun signOutFirebase() {
+        FirebaseAuth.getInstance().signOut()
+        scope.launch {
+            try {
+                credentialManager.clearCredentialState(ClearCredentialStateRequest())
+            } catch (_: Exception) {
+                // Firebase sign-out is already complete; clearing provider state is best-effort.
+            }
+            firebaseEmail = null
+            syncStatus = "از حساب Firebase خارج شدی"
+        }
     }
 
     val authLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()){result->
@@ -574,7 +614,7 @@ fun PregnancyApp(){
                         driveEmail=driveEmail,
                         firebaseEmail=firebaseEmail,
                         onFirebaseSignIn={signInFirebaseWithGoogle()},
-                        onFirebaseSignOut={FirebaseAuth.getInstance().signOut();GoogleSignIn.getClient(activity,GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestEmail().build()).signOut();firebaseEmail=null;syncStatus="از حساب Firebase خارج شدی"},
+                        onFirebaseSignOut={signOutFirebase()},
                         syncStatus=syncStatus,
                         onConnect={authorizeDrive("sync")},
                         onShare={shareDialog=true},
