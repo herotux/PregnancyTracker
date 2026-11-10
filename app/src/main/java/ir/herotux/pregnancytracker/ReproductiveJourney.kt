@@ -303,3 +303,23 @@ private fun CyclePredictionRow(label: String, value: String) {
         Text(value, fontFamily = Fa, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = RoseDark)
     }
 }
+
+
+@Composable
+internal fun DatingPendingScreen(onComplete: () -> Unit, onChangeStage: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.Info, null, tint = RoseDark, modifier = Modifier.size(54.dp))
+        Text("سن بارداری هنوز مشخص نشده", fontFamily = Fa, fontSize = 21.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp))
+        Text(
+            "نونو برایت هفته یا موعد زایمان حدس نمی‌زند. اگر تست مثبت شده، برای تأیید و تعیین سن بارداری با پزشک یا ماما مشورت کن. سونوگرافی سه‌ماهه اول معمولاً دقیق‌ترین روش سونوگرافیک تاریخ‌گذاری است.",
+            fontFamily = Fa, fontSize = 13.sp, lineHeight = 22.sp, textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp, bottom = 22.dp)
+        )
+        Button(onClick = onComplete, modifier = Modifier.fillMaxWidth()) { Text("ثبت تاریخ سونوگرافی یا اطلاعات پزشک", fontFamily = Fa) }
+        TextButton(onClick = onChangeStage) { Text("تغییر مرحله مسیر", fontFamily = Fa) }
+    }
+}
