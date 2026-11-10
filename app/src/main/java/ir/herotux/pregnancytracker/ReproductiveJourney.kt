@@ -293,9 +293,14 @@ internal fun CycleModeScreen(
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.fillMaxWidth().padding(17.dp)) {
                     Text("طول معمول چرخه", fontFamily = Fa, fontWeight = FontWeight.Bold)
-                    Text("$cycleLength روز", fontFamily = Fa, fontSize = 22.sp, color = RoseDark)
-                    Slider(value = cycleLength.toFloat(), onValueChange = { onCycleLength(it.toInt()) }, valueRange = 21f..45f, steps = 23)
-                    Text("اگر چرخه‌ها نامنظم‌اند، این پیش‌بینی‌ها دقت کمتری دارند.", fontFamily = Fa, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (calculatedCycleLength(cycleLogs) != null) {
+                        Text("${fa(observedLength.toString())} روز", fontFamily = Fa, fontSize = 22.sp, color = RoseDark)
+                        Text("میانه محاسبه‌شده از ثبت‌های واقعی؛ برای پیش‌بینی از همین مقدار استفاده می‌شود.", fontFamily = Fa, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text("${fa(cycleLength.toString())} روز", fontFamily = Fa, fontSize = 22.sp, color = RoseDark)
+                        Slider(value = cycleLength.toFloat(), onValueChange = { onCycleLength(it.toInt()) }, valueRange = 21f..45f, steps = 23)
+                        Text("تا زمانی که شروع دو چرخه ثبت شود، از طول معمول واردشده استفاده می‌کنیم. در چرخه‌های نامنظم پیش‌بینی‌ها دقت کمتری دارند.", fontFamily = Fa, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
