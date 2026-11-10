@@ -20,14 +20,8 @@ object FamilyCloud {
     suspend fun create(uid: String, role: String, dueDate: LocalDate): FamilyCloudProfile = withContext(Dispatchers.IO) {
         require(role == "mother" || role == "father") { "نقش کاربر معتبر نیست." }
         val db = FirebaseFirestore.getInstance()
-        var code = newCode()
-        var ref = db.collection("families").document(code)
-        repeat(5) {
-            if (Tasks.await(ref.get()).exists()) {
-                code = newCode()
-                ref = db.collection("families").document(code)
-            }
-        }
+        val code = newCode()
+        val ref = db.collection("families").document(code)
         val data = hashMapOf<String, Any>(
             "inviteCode" to code,
             "ownerUid" to uid,
