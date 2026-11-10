@@ -70,6 +70,7 @@ private val DueKey = stringPreferencesKey("due_date")
 private val ThemeKey = stringPreferencesKey("theme_mode")
 private val ReminderKey = booleanPreferencesKey("weekly_reminder_enabled")
 private val ExamsKey = stringPreferencesKey("exam_records")
+private val BabyNamesKey = stringPreferencesKey("baby_name_lists")
 private const val REMINDER_WORK = "pregnancy-weekly-reminder"
 private const val REMINDER_CHANNEL = "pregnancy_reminders"
 
@@ -272,6 +273,7 @@ fun PregnancyApp(){
     var examEditorOpen by remember{mutableStateOf(false)}
     var examDetail by remember{mutableStateOf<ExamRecord?>(null)}
     var medications by remember{mutableStateOf(emptyList<MedicationRecord>())}
+    var babyNameLists by remember{mutableStateOf(emptyList<BabyNameList>())}
     var medicationEditor by remember{mutableStateOf<MedicationRecord?>(null)}
     var medicationEditorOpen by remember{mutableStateOf(false)}
 
@@ -285,6 +287,7 @@ fun PregnancyApp(){
         reminderEnabled=context.pregnancyStore.data.first()[ReminderKey] ?: false
         exams=loadExamRecords(context.pregnancyStore.data.first()[ExamsKey])
         medications=loadMedications(context)
+        babyNameLists=decodeBabyNameLists(context.pregnancyStore.data.first()[BabyNamesKey])
         rescheduleAllMedicationAlarms(context,medications)
         if(reminderEnabled) scheduleWeeklyReminder(context)
         driveEmail=DriveSync.connectedEmail(context)
@@ -294,6 +297,11 @@ fun PregnancyApp(){
 
     fun saveExams(){
         scope.launch { context.pregnancyStore.edit { it[ExamsKey]=encodeExamRecords(exams) } }
+    }
+
+    fun saveBabyNames(lists:List<BabyNameList>){
+        babyNameLists=lists
+        scope.launch { context.pregnancyStore.edit { it[BabyNamesKey]=encodeBabyNameLists(lists) } }
     }
 
     fun saveLocal(){
@@ -483,9 +491,9 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={
-                            if(screen==7) IconButton({screen=4}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
+                            if(screen==7 || screen==8) IconButton({screen=if(screen==8) 0 else 4}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
                             else IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}
                         },
                         actions={IconButton({screen=4}){Icon(Icons.Default.Settings,null)}},
@@ -502,7 +510,7 @@ fun PregnancyApp(){
                 }
             ){pad->
                 when(screen){
-                    0->HomeModern(p,age,now,pad,{selectedWeek=it},{screen=5})
+                    0->HomeModern(p,age,now,pad,{selectedWeek=it},{screen=5},{screen=8})
                     1->CurrentWeekModern(age.first,age.second,now,p,pad,{selectedWeek=it},{screen=6})
                     2->NotesModern(
                         notes=notes,
@@ -547,6 +555,7 @@ fun PregnancyApp(){
                     5->ExamsModern(records=exams,pregnancy=p,onAdd={examEditor=null;examEditorOpen=true},onEdit={examEditor=it;examEditorOpen=true},onDelete={record->exams=exams.filterNot{it.id==record.id};saveExams();examEditorOpen=false},onOpen={examDetail=it},pad=pad)
                     6->WeeksModern(age.first,pad){selectedWeek=it}
                     7->AboutModern(pad)
+                    8->BabyNamesScreen(savedLists=babyNameLists,onSave={saveBabyNames(it)},pad=pad)
                 }
             }
         }
@@ -641,7 +650,7 @@ fun PregnancyApp(){
 }
 
 @Composable
-fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onWeek:(Int)->Unit,onExams:()->Unit){
+fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onWeek:(Int)->Unit,onExams:()->Unit,onNames:()->Unit){
     val week=age.first.coerceIn(1,40)
     val plan=weeklyPlan(week)
     val daysLeft=ChronoUnit.DAYS.between(now,p.due).coerceAtLeast(0).toInt()
@@ -671,6 +680,22 @@ fun HomeModern(p:Pregnancy,age:Pair<Int,Int>,now:LocalDate,pad:PaddingValues,onW
                     Column(Modifier.weight(1f)){
                         Text("آزمایش‌ها و سونوگرافی‌ها",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
                         Text("نتایج و گزارش‌های بارداری را ثبت و مدیریت کن",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.Default.ChevronLeft,null,tint=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item{
+            Card(modifier=Modifier.fillMaxWidth().clickable{onNames()},shape=RoundedCornerShape(22.dp),
+                colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+                Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically){
+                    Surface(shape=RoundedCornerShape(14.dp),color=Blush,modifier=Modifier.size(46.dp)){
+                        Box(contentAlignment=Alignment.Center){Icon(Icons.Default.Favorite,null,tint=RoseDark)}
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)){
+                        Text("بانک اسامی دخترانه و پسرانه",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
+                        Text("ساخت فهرست، یادداشت و مرتب‌سازی اسم‌های محبوب",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(Icons.Default.ChevronLeft,null,tint=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
