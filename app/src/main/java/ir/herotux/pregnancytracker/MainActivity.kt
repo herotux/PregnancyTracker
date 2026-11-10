@@ -323,6 +323,7 @@ fun PregnancyApp(){
         val prefs=context.pregnancyStore.data.first()
         val saved=prefs[DueKey]
         if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true; hasPregnancyDating=true}
+        if(prefs[JourneyStageKey]!=null) hasProfile=true
         journeyStage=prefs[JourneyStageKey] ?: if(saved!=null) STAGE_PREGNANT else STAGE_PLANNING
         datingMethod=prefs[DatingMethodKey] ?: DATING_LMP
         datingPending=prefs[DatingPendingKey] ?: false
@@ -622,15 +623,18 @@ fun PregnancyApp(){
                                 onboardingStage="done"
                             },
                             onContinuePregnancy={
+                                val effectiveMethod=if(journeyStage==STAGE_POSSIBLE) DATING_UNKNOWN else datingMethod
                                 val estimated=estimatePregnancyDueDate(
-                                    datingMethod,journeyDate,cycleLength,
+                                    effectiveMethod,journeyDate,cycleLength,
                                     gestationalWeeks.toIntOrNull() ?: 0,
                                     gestationalDays.toIntOrNull() ?: 0,embryoAgeDays
                                 )
+                                datingMethod=effectiveMethod
                                 datingPending=estimated==null; hasProfile=true; hasPregnancyDating=estimated!=null
+                                if(estimated!=null) due=estimated
                                 scope.launch{context.pregnancyStore.edit{
                                     it[JourneyStageKey]=journeyStage
-                                    it[DatingMethodKey]=datingMethod
+                                    it[DatingMethodKey]=effectiveMethod
                                     it[DatingPendingKey]=datingPending
                                     if(estimated!=null) it[DueKey]=estimated.toString() else it.remove(DueKey)
                                     it[CycleLengthKey]=cycleLength.toString()
@@ -698,7 +702,7 @@ fun PregnancyApp(){
     }
 
     if(datingPending){
-        DatingPendingScreen(onComplete={onboardingStage="journey";datingMethod=DATING_ULTRASOUND},onChangeStage={onboardingStage="journey"})
+        DatingPendingScreen(onComplete={journeyStage=STAGE_POSITIVE;datingMethod=DATING_ULTRASOUND;onboardingStage="journey"},onChangeStage={onboardingStage="journey"})
         return
     }
     if(!hasPregnancyDating){
