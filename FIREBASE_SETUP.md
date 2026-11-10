@@ -8,7 +8,9 @@ Android package: `ir.herotux.pregnancytracker`
 - Firebase Google Services Gradle plugin and Firebase BoM.
 - Firebase Authentication and Cloud Firestore SDK dependencies.
 - `app/google-services.json` for the registered Android app.
-- Firestore rules scoped to `users/{uid}/...`; users cannot read or write another user's data.
+- Firestore rules scoped to private `users/{uid}/...` documents and shared `families/{inviteCode}` pregnancy profiles.
+- Family profiles are created by a signed-in mother or father. The 8-character invite code lets the other parent join the same profile; family listing is disabled.
+- The initial shared family document stores the pregnancy due date and member roles. Other records remain on-device until their dedicated sync is implemented.
 - Firebase CLI project alias in `.firebaserc`.
 
 ## One-time Firebase Console steps
@@ -27,7 +29,7 @@ After Firebase CLI is authenticated with an account that has access to `nono-ef2
 npx -y firebase-tools@latest deploy --project nono-ef27d --only firestore:rules
 ```
 
-The rules intentionally deny all access except authenticated users reading/writing documents below their own `users/{uid}` path. Do not loosen them to public read/write.
+The rules allow authenticated users to access only their own `users/{uid}` data and family profiles they belong to (or can access using a valid invite code). Family listing is disabled. Do not loosen these rules to public read/write. Deploy the updated rules after pulling this commit.
 
 ## GitHub secret-scanning alert for google-services.json
 
