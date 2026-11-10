@@ -128,7 +128,7 @@ internal fun ReproductiveJourneyScreen(
                 Text("سن بارداری را بر چه اساسی مشخص کنیم؟", fontFamily = Fa, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Text("تاریخ آخرین قاعدگی یک تخمین اولیه است؛ سونوگرافی سه‌ماهه اول یا تاریخ‌گذاری پزشک می‌تواند آن را دقیق‌تر کند.", fontFamily = Fa, fontSize = 12.sp, lineHeight = 19.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            item { JourneyOption("سونوگرافی سه‌ماهه اول (CRL)", "تاریخ سونوگرافی و سن بارداری درج‌شده در گزارش", Icons.Default.MonitorHeart, datingMethod == DATING_ULTRASOUND) { onMethod(DATING_ULTRASOUND) } }
+            item { JourneyOption("سونوگرافی و سن بارداری گزارش‌شده", "سونوگرافی سه‌ماهه اول با اندازه CRL معمولاً دقیق‌تر است", Icons.Default.MonitorHeart, datingMethod == DATING_ULTRASOUND) { onMethod(DATING_ULTRASOUND) } }
             item { JourneyOption("تاریخ اولین روز آخرین قاعدگی", "مناسب وقتی تاریخ دقیق و چرخه نسبتاً منظم است", Icons.Default.CalendarMonth, datingMethod == DATING_LMP) { onMethod(DATING_LMP) } }
             item { JourneyOption("تاریخ تخمک‌گذاری مشخص است", "مثلاً با تست LH یا پایش پزشکی", Icons.Default.Spa, datingMethod == DATING_OVULATION) { onMethod(DATING_OVULATION) } }
             item { JourneyOption("بارداری با IVF یا انتقال جنین", "تاریخ انتقال و سن جنین هنگام انتقال", Icons.Default.Science, datingMethod == DATING_IVF) { onMethod(DATING_IVF) } }
@@ -274,10 +274,10 @@ internal fun CycleModeScreen(
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Blush)) {
                 Column(Modifier.fillMaxWidth().padding(17.dp)) {
-                    Text("ثبت شروع آخرین قاعدگی", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(if (stage == STAGE_POSTPARTUM) "ثبت بازگشت قاعدگی" else "ثبت شروع آخرین قاعدگی", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text(lastPeriod?.let(::jalali) ?: "هنوز تاریخی ثبت نشده", fontFamily = Fa, fontSize = 18.sp, color = RoseDark, modifier = Modifier.padding(top = 5.dp))
                     Button(onClick = onPickPeriodDate, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                        Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(7.dp)); Text("انتخاب تاریخ شروع قاعدگی", fontFamily = Fa)
+                        Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(7.dp)); Text(if (stage == STAGE_POSTPARTUM) "ثبت تاریخ بازگشت قاعدگی" else "انتخاب تاریخ شروع قاعدگی", fontFamily = Fa)
                     }
                 }
             }
