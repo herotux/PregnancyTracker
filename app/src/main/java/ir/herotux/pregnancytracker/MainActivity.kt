@@ -733,27 +733,60 @@ fun PregnancyApp(){
         return
     }
     if(!hasPregnancyDating){
-        CycleModeScreen(
-            stage=journeyStage,lastPeriod=lastPeriod,cycleLength=cycleLength,
-            onPickPeriodDate={datePickerTarget="period";dateDialog=true},
-            onCycleLength={value->cycleLength=value;scope.launch{context.pregnancyStore.edit{it[CycleLengthKey]=value.toString()}}},
-            onSwitchToPregnancy={journeyStage=STAGE_POSITIVE;datingMethod=DATING_LMP;onboardingStage="journey"},
-            onEditStage={onboardingStage="journey"},
-            cycleLogs=cycleLogs,
-            onSaveCycleLog={entry->
-                cycleLogs=(cycleLogs.filterNot{it.date==entry.date}+entry).sortedByDescending{it.date}.take(365)
-                scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
-            },
-            onDeleteCycleLog={date->
-                cycleLogs=cycleLogs.filterNot{it.date==date}
-                scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
-            },
-            preconceptionDone=preconceptionDone,
-            onPreconceptionToggle={index,checked->
-                preconceptionDone=if(checked) preconceptionDone+index else preconceptionDone-index
-                scope.launch{context.pregnancyStore.edit{it[PreconceptionChecklistKey]=encodeChecklist(preconceptionDone)}}
+        val currentUid=FirebaseAuth.getInstance().currentUser?.uid
+        MaterialTheme(colorScheme=lightColorScheme(primary=RoseDark,primaryContainer=Blush)){
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl){
+                when(screen){
+                    9->MessagingCenterScreen(
+                        uid=currentUid,
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11}
+                    )
+                    10->NonoProfileScreen(uid=currentUid,onBack={screen=0},onSignIn={signInFirebaseWithGoogle()})
+                    11->NonoNotificationsScreen(
+                        uid=currentUid,onBack={screen=9},
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12}
+                    )
+                    12->{
+                        val conversation=activeConversation
+                        val other=activeOtherProfile
+                        if(conversation!=null && other!=null && currentUid!=null)
+                            NonoChatThreadScreen(currentUid,conversation,other,onBack={screen=9})
+                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11})
+                    }
+                    else->Column(Modifier.fillMaxSize()){
+                        Row(Modifier.fillMaxWidth().padding(horizontal=12.dp, vertical=5.dp),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically){
+                            IconButton(onClick={screen=9}){Icon(Icons.Default.MailOutline,contentDescription="پیام‌ها")}
+                            IconButton(onClick={screen=11}){Icon(Icons.Default.NotificationsNone,contentDescription="اعلان‌ها")}
+                            IconButton(onClick={screen=10}){Icon(Icons.Default.AccountCircle,contentDescription="پروفایل")}
+                        }
+                        Box(Modifier.weight(1f)){
+                            CycleModeScreen(
+                                stage=journeyStage,lastPeriod=lastPeriod,cycleLength=cycleLength,
+                                onPickPeriodDate={datePickerTarget="period";dateDialog=true},
+                                onCycleLength={value->cycleLength=value;scope.launch{context.pregnancyStore.edit{it[CycleLengthKey]=value.toString()}}},
+                                onSwitchToPregnancy={journeyStage=STAGE_POSITIVE;datingMethod=DATING_LMP;onboardingStage="journey"},
+                                onEditStage={onboardingStage="journey"},
+                                cycleLogs=cycleLogs,
+                                onSaveCycleLog={entry->
+                                    cycleLogs=(cycleLogs.filterNot{it.date==entry.date}+entry).sortedByDescending{it.date}.take(365)
+                                    scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
+                                },
+                                onDeleteCycleLog={date->
+                                    cycleLogs=cycleLogs.filterNot{it.date==date}
+                                    scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
+                                },
+                                preconceptionDone=preconceptionDone,
+                                onPreconceptionToggle={index,checked->
+                                    preconceptionDone=if(checked) preconceptionDone+index else preconceptionDone-index
+                                    scope.launch{context.pregnancyStore.edit{it[PreconceptionChecklistKey]=encodeChecklist(preconceptionDone)}}
+                                }
+                            )
+                        }
+                    }
+                }
             }
-        )
+        }
         if(dateDialog) DateDialogModern(LocalDate.now(),{newDate->
             dateDialog=false;lastPeriod=newDate
             scope.launch{context.pregnancyStore.edit{it[LastPeriodKey]=newDate.toString()}}
