@@ -407,15 +407,28 @@ fun PregnancyApp(){
 
         return try {
             credentialManager.getCredential(context = activity, request = request).credential
-        } catch (_: NoCredentialException) {
-            // Some devices/accounts suppress the Credential Manager bottom sheet
-            // (for example, when Google sign-in prompts are disabled). Fall back
-            // to the explicit Sign in with Google button flow.
-            val signInOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
-            val signInRequest = GetCredentialRequest.Builder()
-                .addCredentialOption(signInOption)
-                .build()
-            credentialManager.getCredential(context = activity, request = signInRequest).credential
+        } catch (error: Exception) {
+            val detail = error.localizedMessage ?: error.message.orEmpty()
+
+            if (detail.contains("Account reauth failed", ignoreCase = true) || detail.contains("[16]")) {
+                // Google Play services can retain a stale credential-provider session.
+                // Clear that state and retry once before surfacing the authentication error.
+                runCatching {
+                    credentialManager.clearCredentialState(ClearCredentialStateRequest())
+                }
+                credentialManager.getCredential(context = activity, request = request).credential
+            } else if (error is NoCredentialException) {
+                // Some devices/accounts suppress the Credential Manager bottom sheet
+                // (for example, when Google sign-in prompts are disabled). Fall back
+                // to the explicit Sign in with Google button flow.
+                val signInOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
+                val signInRequest = GetCredentialRequest.Builder()
+                    .addCredentialOption(signInOption)
+                    .build()
+                credentialManager.getCredential(context = activity, request = signInRequest).credential
+            } else {
+                throw error
+            }
         }
     }
 
