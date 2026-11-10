@@ -76,7 +76,7 @@ val Fa = FontFamily(
     Font(R.font.vazirmatn_extrabold, FontWeight.ExtraBold),
     Font(R.font.vazirmatn_black, FontWeight.Black)
 )
-private val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
+internal val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
 private val DueKey = stringPreferencesKey("due_date")
 private val JourneyStageKey = stringPreferencesKey("reproductive_stage")
 private val DatingMethodKey = stringPreferencesKey("pregnancy_dating_method")
