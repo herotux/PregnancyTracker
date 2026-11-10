@@ -82,7 +82,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['professionalUid', 'role', 'createdAt'])
         && request.resource.data.professionalUid == request.auth.uid
-        && exists(/databases/$(database)/documents/professionals/$(request.auth.uid))
+        && existsAfter(/databases/$(database)/documents/professionals/$(request.auth.uid))
         && request.resource.data.role in ['midwife', 'obgyn'];
       allow update: if signedIn()
         && resource.data.professionalUid == request.auth.uid
