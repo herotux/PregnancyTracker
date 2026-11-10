@@ -14,6 +14,8 @@ Android package: `ir.herotux.pregnancytracker`
 - One-to-one conversations live in `conversations/{conversationId}` with messages in a private `messages` subcollection. Only the two conversation members can read them.
 - The in-app notification bell derives unread-message alerts from each user's unread counter. Push notifications (FCM) and media attachments are not part of this first version.
 - Profile pictures use the signed-in Google account photo or built-in emoji avatars; no Firebase Storage upload or Storage billing is required.
+- User issue reports are stored in `issueReports/{reportId}`. A signed-in user can submit and read only their own reports; users cannot edit review status. Review status can be updated by a trusted project administrator through Firebase Admin tooling/Console.
+- Release updates are checked against the public GitHub Releases API at app startup and every 12 hours. Android notifications require the user to grant notification permission; users can also check manually in Settings.
 - The initial shared family document stores the pregnancy due date and member roles. Other records remain on-device until their dedicated sync is implemented.
 - Firebase CLI project alias in `.firebaserc`.
 
