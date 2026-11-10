@@ -409,7 +409,7 @@ fun NonoProfileScreen(uid: String?, onBack: () -> Unit, onSignIn: () -> Unit) {
             }
         }
         OutlinedTextField(displayName, { displayName = it.take(40) }, modifier = Modifier.fillMaxWidth(), label = { Text("نام نمایشی", fontFamily = Fa) }, singleLine = true)
-        OutlinedTextField(username, { username = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }.take(20) }, modifier = Modifier.fillMaxWidth(), label = { Text("نام کاربری یکتا (انگلیسی)", fontFamily = Fa) }, leadingIcon = { Text("@") }, supportingText = { Text("۳ تا ۲۰ نویسه؛ فقط حروف انگلیسی، عدد و زیرخط", fontFamily = Fa) }, singleLine = true)
+        OutlinedTextField(username, { username = it.lowercase().filter { c -> c in 'a'..'z' || c in '0'..'9' || c == '_' }.take(20) }, modifier = Modifier.fillMaxWidth(), label = { Text("نام کاربری یکتا (انگلیسی)", fontFamily = Fa) }, leadingIcon = { Text("@") }, supportingText = { Text("۳ تا ۲۰ نویسه؛ فقط حروف انگلیسی، عدد و زیرخط", fontFamily = Fa) }, singleLine = true)
         Text("تصویر پروفایل", fontFamily = Fa, fontWeight = FontWeight.Bold)
         Text("می‌توانی تصویر حساب Google را نگه داری یا یکی از آواتارهای آماده را انتخاب کنی.", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
