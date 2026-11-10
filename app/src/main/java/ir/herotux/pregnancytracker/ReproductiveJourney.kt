@@ -58,6 +58,7 @@ internal fun ReproductiveJourneyScreen(
     stage: String,
     datingMethod: String,
     referenceDate: LocalDate,
+    dateSelected: Boolean,
     gestationalWeeks: String,
     gestationalDays: String,
     cycleLength: String,
@@ -153,7 +154,7 @@ internal fun ReproductiveJourneyScreen(
                                     },
                                     fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 13.sp
                                 )
-                                Text(jalali(referenceDate), fontFamily = Fa, fontSize = 14.sp, color = RoseDark)
+                                Text(if (dateSelected) jalali(referenceDate) else "برای انتخاب تاریخ لمس کن", fontFamily = Fa, fontSize = 14.sp, color = RoseDark)
                             }
                             Icon(Icons.Default.EditCalendar, null)
                         }
@@ -216,10 +217,10 @@ internal fun ReproductiveJourneyScreen(
             item {
                 Button(
                     onClick = onContinuePregnancy,
-                    enabled = datingMethod == DATING_UNKNOWN ||
-                        (datingMethod == DATING_ULTRASOUND && (gestationalWeeks.toIntOrNull() ?: -1) in 4..42 && (gestationalDays.toIntOrNull() ?: -1) in 0..6) ||
+                    enabled = datingMethod == DATING_UNKNOWN || (dateSelected &&
+                        ((datingMethod == DATING_ULTRASOUND && (gestationalWeeks.toIntOrNull() ?: -1) in 4..42 && (gestationalDays.toIntOrNull() ?: -1) in 0..6) ||
                         (datingMethod == DATING_LMP && (cycleLength.toIntOrNull() ?: 28) in 21..45) ||
-                        datingMethod in listOf(DATING_OVULATION, DATING_IVF, DATING_CLINICIAN),
+                        datingMethod in listOf(DATING_OVULATION, DATING_IVF, DATING_CLINICIAN))),
                     modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)
                 ) { Text(if (datingMethod == DATING_UNKNOWN) "ادامه بدون تاریخ‌گذاری" else "ثبت اطلاعات و ادامه", fontFamily = Fa, fontWeight = FontWeight.Bold) }
             }
