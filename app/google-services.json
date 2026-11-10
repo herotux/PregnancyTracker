@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "187292523290-km5ca40fc220eqhb30rik06ii5p101t3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ir.herotux.pregnancytracker",
+            "certificate_hash": "70f18de772c1246b926d755501aa24bdbba8a4d6"
+          }
+        },
+        {
           "client_id": "187292523290-5lsjekij36hnfucrr3chsluutgocshtp.apps.googleusercontent.com",
           "client_type": 3
         }
