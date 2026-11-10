@@ -93,6 +93,7 @@ fun ExamsModern(
 ) {
     var filter by remember { mutableStateOf("همه") }
     var query by remember { mutableStateOf("") }
+    var deleteCandidate by remember { mutableStateOf<ExamRecord?>(null) }
 
     val shown = records
         .filter {
@@ -214,7 +215,13 @@ fun ExamsModern(
                 }
             } else {
                 items(shown, key = { it.id }) { record ->
-                    ExamRecordCard(record, pregnancy) { onOpen(record) }
+                    ExamRecordCard(
+                        record = record,
+                        pregnancy = pregnancy,
+                        onClick = { onOpen(record) },
+                        onEdit = { onEdit(record) },
+                        onDelete = { deleteCandidate = record }
+                    )
                 }
             }
         }
@@ -226,6 +233,33 @@ fun ExamsModern(
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp),
             shape = RoundedCornerShape(18.dp)
         )
+
+        deleteCandidate?.let { record ->
+            AlertDialog(
+                onDismissRequest = { deleteCandidate = null },
+                icon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
+                title = { Text("حذف گزارش پزشکی؟", fontFamily = Fa, fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "گزارش «${record.title.ifBlank { record.type }}» برای همیشه از پرونده حذف می‌شود.",
+                        fontFamily = Fa
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onDelete(record)
+                        deleteCandidate = null
+                    }) {
+                        Text("حذف گزارش", fontFamily = Fa, color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteCandidate = null }) {
+                        Text("انصراف", fontFamily = Fa)
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -273,73 +307,98 @@ private fun EmptyExamsCard(filtered: Boolean, onAdd: () -> Unit) {
 }
 
 @Composable
-private fun ExamRecordCard(record: ExamRecord, pregnancy: Pregnancy, onClick: () -> Unit) {
+private fun ExamRecordCard(
+    record: ExamRecord,
+    pregnancy: Pregnancy,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     val age = pregnancy.age(record.date)
     Card(
-        Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(Modifier.padding(15.dp), verticalAlignment = Alignment.Top) {
-            Surface(
-                shape = RoundedCornerShape(15.dp),
-                color = Blush,
-                modifier = Modifier.size(48.dp)
+        Column {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onClick).padding(15.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(examIcon(record.type), null, tint = RoseDark, modifier = Modifier.size(23.dp))
-                }
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        record.title.ifBlank { record.type },
-                        fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp,
-                        maxLines = 1, modifier = Modifier.weight(1f)
-                    )
-                    if (record.attachmentUri != null) {
-                        Icon(Icons.Default.AttachFile, null, modifier = Modifier.size(17.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    examTypeShort(record.type) + "  •  " + jalali(record.date),
-                    fontFamily = Fa, fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    Modifier.padding(top = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    shape = RoundedCornerShape(15.dp),
+                    color = Blush,
+                    modifier = Modifier.size(48.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(9.dp),
-                        color = Blush
-                    ) {
-                        Text(
-                            "هفته " + fa(age.first) + "، روز " + fa(age.second),
-                            fontFamily = Fa, fontSize = 11.sp, color = RoseDark,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    if (record.result.isNotBlank()) {
-                        Text(
-                            record.result.replace("\n", " "),
-                            fontFamily = Fa, fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(examIcon(record.type), null, tint = RoseDark, modifier = Modifier.size(23.dp))
                     }
                 }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            record.title.ifBlank { record.type },
+                            fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                            maxLines = 1, modifier = Modifier.weight(1f)
+                        )
+                        if (record.attachmentUri != null) {
+                            Icon(Icons.Default.AttachFile, null, modifier = Modifier.size(17.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        examTypeShort(record.type) + "  •  " + jalali(record.date),
+                        fontFamily = Fa, fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        Modifier.padding(top = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(shape = RoundedCornerShape(9.dp), color = Blush) {
+                            Text(
+                                "هفته " + fa(age.first) + "، روز " + fa(age.second),
+                                fontFamily = Fa, fontSize = 11.sp, color = RoseDark,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        if (record.result.isNotBlank()) {
+                            Text(
+                                record.result.replace("\n", " "),
+                                fontFamily = Fa, fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+                Icon(
+                    Icons.Default.ChevronLeft, null,
+                    tint = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 13.dp)
+                )
             }
-            Icon(
-                Icons.Default.ChevronLeft, null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(top = 13.dp)
-            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("ویرایش", fontFamily = Fa, fontSize = 12.sp)
+                }
+                TextButton(onClick = onDelete) {
+                    Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("حذف", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 }
