@@ -55,6 +55,7 @@ fun decodeBabyNameLists(raw:String?):List<BabyNameList> = runCatching {
  }
 }.getOrDefault(emptyList())
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->Unit,pad:PaddingValues) {
  val context=LocalContext.current
@@ -71,7 +72,7 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
  Column(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp)) {
   Text("بانک اسامی",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=8.dp))
   Text("اسم‌ها را پیدا کن، در فهرست‌های دلخواهت نگه دار و برایشان یادداشت بنویس.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp,bottom=10.dp))
-  ScrollableTabRow(selectedTabIndex=tab,edgePadding=0.dp){Tab(tab==0,{tab=0;activeId=null},{Text("بانک نام‌ها",fontFamily=Fa)});Tab(tab==1,{tab=1;activeId=null},{Text("فهرست‌های من",fontFamily=Fa)})}
+  ScrollableTabRow(selectedTabIndex=tab,edgePadding=0.dp){Tab(selected=tab==0,onClick={tab=0;activeId=null},text={Text("بانک نام‌ها",fontFamily=Fa)});Tab(selected=tab==1,onClick={tab=1;activeId=null},text={Text("فهرست‌های من",fontFamily=Fa)})}
   if(tab==0){
    Row(Modifier.fillMaxWidth().padding(top=10.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(gender=="دختر",{gender="دختر"},{Text("دخترانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Favorite,null)});FilterChip(gender=="پسر",{gender="پسر"},{Text("پسرانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Person,null)})}
    OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().padding(top=7.dp),label={Text("جست‌وجوی اسم",fontFamily=Fa)},singleLine=true,shape=RoundedCornerShape(14.dp))
