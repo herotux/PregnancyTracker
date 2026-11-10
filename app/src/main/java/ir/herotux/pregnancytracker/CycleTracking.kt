@@ -181,3 +181,59 @@ internal fun CycleLogSection(
 private fun FlowRowCompat(content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { content() }
 }
+
+
+internal val preconceptionChecklist = listOf(
+    "برای مشاوره پیش از بارداری وقت گرفته‌ام",
+    "داروها و مکمل‌ها را با پزشک یا داروساز مرور کرده‌ام",
+    "درباره اسیدفولیک و مقدار مناسب آن سؤال کرده‌ام",
+    "وضعیت واکسیناسیون را بررسی کرده‌ام",
+    "بیماری‌های زمینه‌ای و سابقه پزشکی را مطرح کرده‌ام",
+    "درباره آزمایش‌های لازم پیش از بارداری سؤال کرده‌ام",
+    "سلامت دهان و دندان را بررسی کرده‌ام",
+    "درباره سبک زندگی، تغذیه و مصرف دخانیات مشورت کرده‌ام"
+)
+
+internal fun encodeChecklist(done: Set<Int>): String = JSONArray().apply {
+    done.sorted().forEach { put(it) }
+}.toString()
+
+internal fun decodeChecklist(raw: String?): Set<Int> {
+    if (raw.isNullOrBlank()) return emptySet()
+    return runCatching {
+        val array = JSONArray(raw)
+        buildSet {
+            for (i in 0 until array.length()) {
+                val index = array.optInt(i, -1)
+                if (index in preconceptionChecklist.indices) add(index)
+            }
+        }
+    }.getOrDefault(emptySet())
+}
+
+@Composable
+internal fun PreconceptionSection(
+    completed: Set<Int>,
+    onToggle: (Int, Boolean) -> Unit
+) {
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text("چک‌لیست آمادگی پیش از بارداری", fontFamily = Fa, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(
+                "این فهرست برای آماده‌سازی گفت‌وگو با پزشک است، نه تشخیص یا تجویز. موارد را متناسب با شرایط خودت بررسی کن.",
+                fontFamily = Fa, fontSize = 11.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LinearProgressIndicator(
+                progress = { completed.size.toFloat() / preconceptionChecklist.size },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("${fa(completed.size)} از ${fa(preconceptionChecklist.size)} مورد انجام شده", fontFamily = Fa, fontSize = 11.sp, color = RoseDark)
+            preconceptionChecklist.forEachIndexed { index, label ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = index in completed, onCheckedChange = { onToggle(index, it) })
+                    Text(label, fontFamily = Fa, fontSize = 12.sp, lineHeight = 18.sp)
+                }
+            }
+        }
+    }
+}
