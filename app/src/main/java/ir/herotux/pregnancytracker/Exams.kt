@@ -206,6 +206,14 @@ fun ExamsModern(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    TextButton(
+                        onClick = onAdd,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("افزودن گزارش", fontFamily = Fa, fontSize = 12.sp)
+                    }
                 }
             }
 
