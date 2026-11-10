@@ -11,6 +11,7 @@ import {
   collection,
   setDoc,
   updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { after, before, beforeEach, test } from "node:test";
 
@@ -314,7 +315,7 @@ test("users can submit and read only their own issue reports", async () => {
     androidVersion: "16",
     device: "Samsung Galaxy",
     status: "new",
-    createdAt: new Date(),
+    createdAt: serverTimestamp(),
   };
   await assertSucceeds(setDoc(doc(ownerDb, "issueReports/report-1"), report));
   await assertSucceeds(getDoc(doc(ownerDb, "issueReports/report-1")));
@@ -335,7 +336,7 @@ test("users cannot submit issue reports on behalf of another account or forge re
     androidVersion: "16",
     device: "Android",
     status: "new",
-    createdAt: new Date(),
+    createdAt: serverTimestamp(),
   }));
   await assertFails(setDoc(doc(db, "issueReports/forged-status"), {
     uid: "report-owner",
@@ -347,6 +348,6 @@ test("users cannot submit issue reports on behalf of another account or forge re
     androidVersion: "16",
     device: "Android",
     status: "resolved",
-    createdAt: new Date(),
+    createdAt: serverTimestamp(),
   }));
 });
