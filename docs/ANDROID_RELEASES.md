@@ -40,9 +40,9 @@ The workflow intentionally fails without these secrets. It does not create a new
 
 ## 3. Enable Google sign-in for the release certificate
 
-After the first successful release workflow, open its run summary and copy the **Release SHA-1** fingerprint. In Firebase Console → Project settings → Your apps → Android app, add this SHA-1. Also add SHA-256 if Firebase requests it. Download the refreshed `google-services.json` if Firebase instructs you to do so, then commit the updated file.
+Before publishing the first APK, run GitHub Actions → **Android Release Certificate Fingerprint** → Run workflow. Open its run summary and copy the SHA-1 and SHA-256 fingerprints. In Firebase Console → Project settings → Your apps → Android app, add both fingerprints. Download the refreshed `google-services.json` and replace `app/google-services.json` in this branch. Commit that updated Firebase configuration.
 
-Debug and release certificates are different. Adding only the debug SHA-1 does not enable Google sign-in in the release APK.
+Debug and release certificates are different. Adding only the debug SHA-1 does not enable Google sign-in in the release APK. The fingerprint workflow does not publish an APK.
 
 ## 4. Publish a release
 
