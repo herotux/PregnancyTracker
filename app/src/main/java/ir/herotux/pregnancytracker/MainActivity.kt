@@ -803,7 +803,7 @@ fun PregnancyApp(){
                     NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=3.dp){
                         listOf("خانه" to Icons.Default.Home,"هفته جاری" to Icons.Default.Today,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings,"پیام‌ها" to Icons.Default.MailOutline)
                             .forEachIndexed{i,(label,icon)->
-                                NavigationBarItem(selected=screen==i,onClick={screen=i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
+                                NavigationBarItem(selected=screen==(if(i==5) 9 else i),onClick={screen=if(i==5) 9 else i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
                             }
                     }
                 }
