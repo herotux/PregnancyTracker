@@ -331,6 +331,7 @@ fun PregnancyApp(){
     var medicationEditorOpen by remember{mutableStateOf(false)}
 
     LaunchedEffect(Unit){
+        NonoUpdateService.schedule(context)
         val prefs=context.pregnancyStore.data.first()
         val saved=prefs[DueKey]
         if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true; hasPregnancyDating=true}
@@ -747,6 +748,8 @@ fun PregnancyApp(){
                         uid=currentUid,onBack={screen=9},
                         onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12}
                     )
+                    13->IssueReportScreen(uid=currentUid,onBack={screen=0},onSignIn={signInFirebaseWithGoogle()})
+                    14->UpdateCenterScreen(onBack={screen=0})
                     12->{
                         val conversation=activeConversation
                         val other=activeOtherProfile
@@ -759,6 +762,8 @@ fun PregnancyApp(){
                             IconButton(onClick={screen=9}){Icon(Icons.Default.MailOutline,contentDescription="پیام‌ها")}
                             IconButton(onClick={screen=11}){Icon(Icons.Default.NotificationsNone,contentDescription="اعلان‌ها")}
                             IconButton(onClick={screen=10}){Icon(Icons.Default.AccountCircle,contentDescription="پروفایل")}
+                            IconButton(onClick={screen=13}){Icon(Icons.Default.BugReport,contentDescription="گزارش مشکل")}
+                            IconButton(onClick={screen=14}){Icon(Icons.Default.SystemUpdate,contentDescription="بروزرسانی")}
                         }
                         Box(Modifier.weight(1f)){
                             CycleModeScreen(
@@ -817,9 +822,9 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";9->"پیام‌ها";10->"پروفایل من";11->"اعلان‌ها";12->"گفت‌وگو";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";9->"پیام‌ها";10->"پروفایل من";11->"اعلان‌ها";12->"گفت‌وگو";13->"گزارش مشکل";14->"بروزرسانی";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={
-                            if(screen in 7..12) IconButton({screen=when(screen){7->4;8->0;else->9}}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
+                            if(screen in 7..14) IconButton({screen=when(screen){7->4;8->0;13->4;14->4;else->9}}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
                             else IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}
                         },
                         actions={
@@ -911,12 +916,16 @@ fun PregnancyApp(){
                         themeMode=themeMode,
                         onTheme={themeDialog=true},
                         pad=pad,
-                        onAbout={screen=7}
+                        onAbout={screen=7},
+                        onReport={screen=13},
+                        onUpdates={screen=14}
                     )
                     5->ExamsModern(records=exams,pregnancy=p,onAdd={examEditor=null;examEditorOpen=true},onEdit={examEditor=it;examEditorOpen=true},onDelete={record->exams=exams.filterNot{it.id==record.id};saveExams();examEditorOpen=false},onOpen={examDetail=it},pad=pad)
                     6->WeeksModern(age.first,pad){selectedWeek=it}
                     7->AboutModern(pad)
                     8->BabyNamesScreen(savedLists=babyNameLists,onSave={saveBabyNames(it)},pad=pad)
+                    13->IssueReportScreen(uid=FirebaseAuth.getInstance().currentUser?.uid,onBack={screen=4},onSignIn={signInFirebaseWithGoogle()})
+                    14->UpdateCenterScreen(onBack={screen=4})
                     9->MessagingCenterScreen(
                         uid=FirebaseAuth.getInstance().currentUser?.uid,
                         onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
@@ -1769,6 +1778,8 @@ fun SettingsModern(
     themeMode:String,
     onTheme:()->Unit,
     onAbout:()->Unit,
+    onReport:()->Unit,
+    onUpdates:()->Unit,
     pad:PaddingValues
 ){
     LazyColumn(
@@ -1855,6 +1866,8 @@ fun SettingsModern(
                 when(themeMode){"dark"->"حالت تاریک";"light"->"حالت روشن";else->"همگام با تنظیمات دستگاه"}
             ){onTheme()}
         }
+        item{SettingTile(Icons.Default.BugReport,"گزارش مشکل یا پیشنهاد","ثبت و پیگیری گزارش‌های ارسال‌شده"){onReport()}}
+        item{SettingTile(Icons.Default.SystemUpdate,"بروزرسانی برنامه","بررسی نسخه جدید و دریافت اعلان انتشار"){onUpdates()}}
         item{
             SettingTile(
                 Icons.Default.Info,
