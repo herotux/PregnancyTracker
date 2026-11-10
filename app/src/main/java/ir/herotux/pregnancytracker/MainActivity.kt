@@ -57,6 +57,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import kotlin.math.roundToInt
@@ -391,13 +392,31 @@ fun PregnancyApp(){
     }
 
     suspend fun requestGoogleCredential(): androidx.credentials.Credential {
+        val serverClientId = context.getString(R.string.default_web_client_id)
+
+        // First show the Credential Manager account picker, including accounts
+        // that have not previously authorized this app.
         val googleIdOption = GetGoogleIdOption.Builder()
-            .setServerClientId(context.getString(R.string.default_web_client_id))
+            .setServerClientId(serverClientId)
             .setFilterByAuthorizedAccounts(false)
             .setAutoSelectEnabled(false)
             .build()
-        val request = GetCredentialRequest.Builder().addCredentialOption(googleIdOption).build()
-        return credentialManager.getCredential(context = activity, request = request).credential
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+
+        return try {
+            credentialManager.getCredential(context = activity, request = request).credential
+        } catch (_: NoCredentialException) {
+            // Some devices/accounts suppress the Credential Manager bottom sheet
+            // (for example, when Google sign-in prompts are disabled). Fall back
+            // to the explicit Sign in with Google button flow.
+            val signInOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
+            val signInRequest = GetCredentialRequest.Builder()
+                .addCredentialOption(signInOption)
+                .build()
+            credentialManager.getCredential(context = activity, request = signInRequest).credential
+        }
     }
 
     fun signInFirebaseWithGoogle(onSignedIn: () -> Unit = {}) {
@@ -432,7 +451,7 @@ fun PregnancyApp(){
                 authBusy = false
                 val detail = error.localizedMessage ?: error.message ?: error.javaClass.simpleName
                 authError = when {
-                    error is NoCredentialException -> "حساب Google روی دستگاه پیدا نشد. ابتدا یک حساب Google به گوشی اضافه کن."
+                    error is NoCredentialException -> "سرویس ورود Google هیچ حسابی برنگرداند. Google Play services و تنظیمات ورود با Google را بررسی کن و دوباره تلاش کن."
                     detail.contains("cancel", ignoreCase = true) -> "ورود Google لغو شد."
                     else -> "ورود Google ناموفق بود: $detail"
                 }
