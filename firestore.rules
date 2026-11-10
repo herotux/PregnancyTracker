@@ -1,15 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
     function isFamilyMember(data) {
       return signedIn() && data.members[request.auth.uid] != null;
     }
+    function validScopes(scopes) {
+      return scopes is list
+        && scopes.size() > 0
+        && scopes.size() <= 8
+        && scopes.hasOnly([
+          'pregnancy_summary',
+          'exam_records',
+          'ultrasounds',
+          'medications',
+          'symptoms',
+          'private_notes',
+          'appointments',
+          'clinician_notes'
+        ]);
+    }
+
     match /users/{userId}/{document=**} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
+
     match /families/{familyId} {
       allow get: if isFamilyMember(resource.data)
         || (signedIn() && resource.data.inviteCode == familyId);
@@ -33,6 +48,83 @@ service cloud.firestore {
       );
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }
+
+    // A professional profile is self-managed but can never self-verify.
+    match /professionals/{professionalUid} {
+      allow get: if signedIn() && request.auth.uid == professionalUid;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid == professionalUid
+        && request.resource.data.keys().hasOnly([
+          'uid', 'role', 'displayName', 'licenseNumber', 'reviewStatus',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role in ['midwife', 'obgyn']
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.reviewStatus == 'pending';
+      allow update: if signedIn()
+        && request.auth.uid == professionalUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'licenseNumber', 'updatedAt'
+        ])
+        && request.resource.data.reviewStatus == resource.data.reviewStatus
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if false;
+    }
+
+    // High-entropy invitation code maps to a professional; enumeration is denied.
+    match /professionalInvites/{inviteCode} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['professionalUid', 'role', 'createdAt'])
+        && request.resource.data.professionalUid == request.auth.uid
+        && exists(/databases/$(database)/documents/professionals/$(request.auth.uid))
+        && request.resource.data.role in ['midwife', 'obgyn'];
+      allow update: if signedIn()
+        && resource.data.professionalUid == request.auth.uid
+        && request.resource.data.professionalUid == resource.data.professionalUid
+        && request.resource.data.role == resource.data.role;
+      allow delete: if signedIn() && resource.data.professionalUid == request.auth.uid;
+    }
+
+    // Patient owns consent. Professionals can only read requests addressed to them.
+    match /careRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'patientUid', 'familyId', 'professionalUid', 'professionalRole',
+          'scopes', 'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.patientUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && validScopes(request.resource.data.scopes)
+        && request.resource.data.professionalRole in ['midwife', 'obgyn']
+        && exists(/databases/$(database)/documents/families/$(request.resource.data.familyId))
+        && get(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.members[request.auth.uid] in ['mother', 'father']
+        && exists(/databases/$(database)/documents/professionals/$(request.resource.data.professionalUid))
+        && get(/databases/$(database)/documents/professionals/$(request.resource.data.professionalUid)).data.role == request.resource.data.professionalRole
+        && exists(/databases/$(database)/documents/professionalInvites/$(request.resource.data.inviteCode))
+        && get(/databases/$(database)/documents/professionalInvites/$(request.resource.data.inviteCode)).data.professionalUid == request.resource.data.professionalUid;
+      allow get, list: if signedIn()
+        && (resource.data.patientUid == request.auth.uid
+          || resource.data.professionalUid == request.auth.uid);
+      allow update: if signedIn()
+        && resource.data.patientUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'respondedAt'])
+        && request.resource.data.patientUid == resource.data.patientUid
+        && request.resource.data.professionalUid == resource.data.professionalUid
+        && request.resource.data.familyId == resource.data.familyId
+        && request.resource.data.scopes == resource.data.scopes
+        && (
+          (resource.data.status == 'pending' && request.resource.data.status in ['approved', 'rejected'])
+          || (resource.data.status == 'approved' && request.resource.data.status == 'revoked')
+        );
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
