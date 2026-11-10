@@ -117,7 +117,7 @@ object NonoMessaging {
                 "username" to normalized, "avatarKey" to avatarKey,
                 "updatedAt" to FieldValue.serverTimestamp()
             ), com.google.firebase.firestore.SetOptions.merge())
-            null
+            true
         })
     }
 
@@ -525,7 +525,7 @@ fun NonoChatThreadScreen(
         val reg = NonoMessaging.listenMessages(conversation.id, { messages = it }, { error = it })
         onDispose { reg.remove() }
     }
-    LaunchedEffect(conversation.id, uid) { runCatching { NonoMessaging.markRead(conversation.id, uid) } }
+    LaunchedEffect(conversation.id, uid, messages.size) { runCatching { NonoMessaging.markRead(conversation.id, uid) } }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
