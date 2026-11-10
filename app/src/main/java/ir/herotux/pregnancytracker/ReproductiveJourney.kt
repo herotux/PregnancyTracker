@@ -264,8 +264,10 @@ internal fun CycleModeScreen(
     preconceptionDone: Set<Int>,
     onPreconceptionToggle: (Int, Boolean) -> Unit
 ) {
-    val nextPeriod = lastPeriod?.plusDays(cycleLength.toLong())
-    val ovulation = lastPeriod?.plusDays((cycleLength - 14).toLong())
+    val observedLength = calculatedCycleLength(cycleLogs) ?: cycleLength
+    val predictionStart = detectedPeriodStarts(cycleLogs).lastOrNull() ?: lastPeriod
+    val nextPeriod = predictionStart?.plusDays(observedLength.toLong())
+    val ovulation = predictionStart?.plusDays((observedLength - 14).toLong())
     val fertileStart = ovulation?.minusDays(5)
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -313,8 +315,16 @@ internal fun CycleModeScreen(
                 }
             }
         }
+        item { CycleAnalyticsSection(logs = cycleLogs) }
         item {
             CycleLogSection(
+                logs = cycleLogs,
+                onSave = onSaveCycleLog,
+                onDelete = onDeleteCycleLog
+            )
+        }
+        item {
+            CycleHistoryEditor(
                 logs = cycleLogs,
                 onSave = onSaveCycleLog,
                 onDelete = onDeleteCycleLog
@@ -327,7 +337,7 @@ internal fun CycleModeScreen(
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("ثبت و پیگیری", fontFamily = Fa, fontWeight = FontWeight.Bold)
-                    Text("در نسخه‌های بعدی، ثبت شدت خون‌ریزی، علائم، دمای پایه بدن، ترشحات دهانه رحم و نتیجه تست LH به این بخش اضافه می‌شود.", fontFamily = Fa, fontSize = 12.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 5.dp))
+                    Text("ثبت روزانه، ویرایش روزهای گذشته، تاریخچه شروع قاعدگی و نمودار روند داده‌های ثبت‌شده در همین بخش در دسترس است.", fontFamily = Fa, fontSize = 12.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 5.dp))
                     TextButton(onClick = onSwitchToPregnancy) { Text("ثبت بارداری یا نتیجه تست مثبت", fontFamily = Fa) }
                     TextButton(onClick = onEditStage) { Text("تغییر مرحله مسیر", fontFamily = Fa) }
                 }
