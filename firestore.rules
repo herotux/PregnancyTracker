@@ -85,7 +85,7 @@ service cloud.firestore {
         && request.resource.data.device is string
         && request.resource.data.device.size() <= 120
         && request.resource.data.status == 'new'
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt is timestamp;
       allow get, list: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
