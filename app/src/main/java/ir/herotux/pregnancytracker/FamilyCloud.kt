@@ -33,6 +33,11 @@ object FamilyCloud {
         FamilyCloudProfile(code, code, dueDate, 1)
     }
 
+    suspend fun updateDueDate(familyId: String, dueDate: LocalDate) = withContext(Dispatchers.IO) {
+        val ref = FirebaseFirestore.getInstance().collection("families").document(familyId)
+        Tasks.await(ref.update("dueDate", dueDate.toString(), "updatedAt", FieldValue.serverTimestamp()))
+    }
+
     suspend fun join(uid: String, role: String, inviteCode: String): FamilyCloudProfile = withContext(Dispatchers.IO) {
         require(role == "mother" || role == "father") { "ابتدا نقش خود را انتخاب کن." }
         val code = inviteCode.trim().uppercase().filter { it.isLetterOrDigit() }
