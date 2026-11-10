@@ -84,6 +84,7 @@ private val DatingPendingKey = booleanPreferencesKey("pregnancy_dating_pending")
 private val LastPeriodKey = stringPreferencesKey("cycle_last_period")
 private val CycleLengthKey = stringPreferencesKey("cycle_length")
 private val CycleLogsKey = stringPreferencesKey("cycle_day_logs")
+private val PreconceptionChecklistKey = stringPreferencesKey("preconception_checklist")
 private val DatingReferenceDateKey = stringPreferencesKey("pregnancy_dating_reference_date")
 private val DatingWeeksKey = stringPreferencesKey("pregnancy_dating_weeks")
 private val DatingDaysKey = stringPreferencesKey("pregnancy_dating_days")
@@ -287,6 +288,7 @@ fun PregnancyApp(){
     var cycleLength by remember{mutableIntStateOf(28)}
     var lastPeriod by remember{mutableStateOf<LocalDate?>(null)}
     var cycleLogs by remember{mutableStateOf(emptyList<CycleDayLog>())}
+    var preconceptionDone by remember{mutableStateOf(emptySet<Int>())}
     var embryoAgeDays by remember{mutableIntStateOf(5)}
     var datePickerTarget by remember{mutableStateOf("due")}
     var screen by remember{mutableIntStateOf(0)}
@@ -343,6 +345,7 @@ fun PregnancyApp(){
         cycleLength=(prefs[CycleLengthKey]?.toIntOrNull() ?: 28).coerceIn(21,45)
         lastPeriod=prefs[LastPeriodKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()}
         cycleLogs=decodeCycleLogs(prefs[CycleLogsKey])
+        preconceptionDone=decodeChecklist(prefs[PreconceptionChecklistKey])
         val snapshot=DriveSync.readLocalSnapshot(context)
         if(snapshot.first.isNotEmpty()) notes=snapshot.first
         localUpdatedAt=snapshot.second
@@ -738,6 +741,11 @@ fun PregnancyApp(){
             onDeleteCycleLog={date->
                 cycleLogs=cycleLogs.filterNot{it.date==date}
                 scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
+            },
+            preconceptionDone=preconceptionDone,
+            onPreconceptionToggle={index,checked->
+                preconceptionDone=if(checked) preconceptionDone+index else preconceptionDone-index
+                scope.launch{context.pregnancyStore.edit{it[PreconceptionChecklistKey]=encodeChecklist(preconceptionDone)}}
             }
         )
         if(dateDialog) DateDialogModern(LocalDate.now(),{newDate->
