@@ -78,6 +78,11 @@ val Fa = FontFamily(
 )
 private val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
 private val DueKey = stringPreferencesKey("due_date")
+private val JourneyStageKey = stringPreferencesKey("reproductive_stage")
+private val DatingMethodKey = stringPreferencesKey("pregnancy_dating_method")
+private val DatingPendingKey = booleanPreferencesKey("pregnancy_dating_pending")
+private val LastPeriodKey = stringPreferencesKey("cycle_last_period")
+private val CycleLengthKey = stringPreferencesKey("cycle_length")
 private val ThemeKey = stringPreferencesKey("theme_mode")
 private val ReminderKey = booleanPreferencesKey("weekly_reminder_enabled")
 private val UserRoleKey = stringPreferencesKey("user_role")
@@ -266,6 +271,17 @@ fun PregnancyApp(){
     var due by remember{mutableStateOf(LocalDate.now())}
     var loaded by remember{mutableStateOf(false)}
     var hasProfile by remember{mutableStateOf(false)}
+    var hasPregnancyDating by remember{mutableStateOf(false)}
+    var datingPending by remember{mutableStateOf(false)}
+    var journeyStage by remember{mutableStateOf(STAGE_PLANNING)}
+    var datingMethod by remember{mutableStateOf(DATING_LMP)}
+    var journeyDate by remember{mutableStateOf(LocalDate.now())}
+    var gestationalWeeks by remember{mutableStateOf("8")}
+    var gestationalDays by remember{mutableStateOf("0")}
+    var cycleLength by remember{mutableIntStateOf(28)}
+    var lastPeriod by remember{mutableStateOf<LocalDate?>(null)}
+    var embryoAgeDays by remember{mutableIntStateOf(5)}
+    var datePickerTarget by remember{mutableStateOf("due")}
     var screen by remember{mutableIntStateOf(0)}
     var calendarMonth by remember{mutableStateOf(LocalDate.now().withDayOfMonth(1))}
     var selectedDate by remember{mutableStateOf(LocalDate.now())}
@@ -304,8 +320,14 @@ fun PregnancyApp(){
     var medicationEditorOpen by remember{mutableStateOf(false)}
 
     LaunchedEffect(Unit){
-        val saved=context.pregnancyStore.data.first()[DueKey]
-        if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true}
+        val prefs=context.pregnancyStore.data.first()
+        val saved=prefs[DueKey]
+        if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true; hasPregnancyDating=true}
+        journeyStage=prefs[JourneyStageKey] ?: if(saved!=null) STAGE_PREGNANT else STAGE_PLANNING
+        datingMethod=prefs[DatingMethodKey] ?: DATING_LMP
+        datingPending=prefs[DatingPendingKey] ?: false
+        cycleLength=(prefs[CycleLengthKey]?.toIntOrNull() ?: 28).coerceIn(21,45)
+        lastPeriod=prefs[LastPeriodKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()}
         val snapshot=DriveSync.readLocalSnapshot(context)
         if(snapshot.first.isNotEmpty()) notes=snapshot.first
         localUpdatedAt=snapshot.second
@@ -322,7 +344,7 @@ fun PregnancyApp(){
         userRole=profilePrefs[UserRoleKey]
         familyId=profilePrefs[FamilyIdKey]
         familyInviteCode=profilePrefs[FamilyInviteCodeKey]
-        onboardingStage=if(userRole==null) "welcome" else if(saved==null) "family" else "done"
+        onboardingStage=if(userRole==null) "welcome" else if(saved==null && prefs[JourneyStageKey]==null) "journey" else "done"
         loaded=true
     }
 
@@ -577,9 +599,50 @@ fun PregnancyApp(){
                                 userRole=role
                                 scope.launch{context.pregnancyStore.edit{it[UserRoleKey]=role}}
                                 onboardingError=null
-                                onboardingStage=if(hasProfile) "done" else "family"
+                                onboardingStage=if(hasProfile) "done" else "journey"
                             },
                             onBack={onboardingStage="welcome"})
+                        "journey" -> ReproductiveJourneyScreen(
+                            stage=journeyStage, datingMethod=datingMethod, referenceDate=journeyDate,
+                            gestationalWeeks=gestationalWeeks, gestationalDays=gestationalDays,
+                            cycleLength=cycleLength.toString(), embryoAgeDays=embryoAgeDays,
+                            onStage={journeyStage=it}, onMethod={datingMethod=it},
+                            onPickDate={datePickerTarget="journey";dateDialog=true},
+                            onWeeks={gestationalWeeks=it}, onDays={gestationalDays=it},
+                            onCycleLength={cycleLength=it.toIntOrNull()?.coerceIn(21,45) ?: 28},
+                            onEmbryoAge={embryoAgeDays=it},
+                            onContinueCycle={
+                                datingPending=false; hasProfile=true; hasPregnancyDating=false
+                                scope.launch{context.pregnancyStore.edit{
+                                    it[JourneyStageKey]=journeyStage
+                                    it[CycleLengthKey]=cycleLength.toString()
+                                    it[DatingPendingKey]=false
+                                    it.remove(DueKey)
+                                }}
+                                onboardingStage="done"
+                            },
+                            onContinuePregnancy={
+                                val estimated=estimatePregnancyDueDate(
+                                    datingMethod,journeyDate,cycleLength,
+                                    gestationalWeeks.toIntOrNull() ?: 0,
+                                    gestationalDays.toIntOrNull() ?: 0,embryoAgeDays
+                                )
+                                datingPending=estimated==null; hasProfile=true; hasPregnancyDating=estimated!=null
+                                scope.launch{context.pregnancyStore.edit{
+                                    it[JourneyStageKey]=journeyStage
+                                    it[DatingMethodKey]=datingMethod
+                                    it[DatingPendingKey]=datingPending
+                                    if(estimated!=null) it[DueKey]=estimated.toString() else it.remove(DueKey)
+                                    it[CycleLengthKey]=cycleLength.toString()
+                                }
+                                if(estimated!=null){
+                                    due=estimated
+                                    DriveSync.saveLocalSnapshot(context,estimated,notes,System.currentTimeMillis())
+                                }}
+                                onboardingStage="done"
+                            },
+                            onBack={onboardingStage="role"}
+                        )
                         else -> NonoFamilySetupScreen(
                             role=userRole ?: "mother",email=firebaseEmail,inviteCode=inviteCodeInput,
                             busy=onboardingBusy || authBusy,error=onboardingError ?: authError,
@@ -616,32 +679,39 @@ fun PregnancyApp(){
                 }
             }
         }
-        if(dateDialog) DateDialogModern(due,{newDue->
-            dateDialog=false
-            due=newDue
-            val user=FirebaseAuth.getInstance().currentUser
-            scope.launch{
-                onboardingBusy=true
-                onboardingError=null
-                if(user!=null){
-                    runCatching{FamilyCloud.create(user.uid,userRole ?: "mother",newDue)}
-                        .onSuccess{profile->
-                            familyId=profile.familyId
-                            familyInviteCode=profile.inviteCode
-                            context.pregnancyStore.edit{
-                                it[FamilyIdKey]=profile.familyId
-                                it[FamilyInviteCodeKey]=profile.inviteCode
-                            }
-                            syncStatus="پرونده مشترک ساخته شد؛ کد دعوت: " + profile.inviteCode
-                        }
-                        .onFailure{syncStatus="پرونده روی گوشی ذخیره شد، اما ساخت پرونده ابری ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+        if(dateDialog) DateDialogModern(
+            if(datePickerTarget=="due") due else journeyDate,
+            {newDate->
+                dateDialog=false
+                when(datePickerTarget){
+                    "journey" -> journeyDate=newDate
+                    "period" -> {
+                        lastPeriod=newDate
+                        scope.launch{context.pregnancyStore.edit{it[LastPeriodKey]=newDate.toString()}}
+                    }
+                    else -> { due=newDate; hasPregnancyDating=true; saveLocal() }
                 }
-                hasProfile=true
-                context.pregnancyStore.edit{it[DueKey]=newDue.toString()}
-                DriveSync.saveLocalSnapshot(context,newDue,notes,System.currentTimeMillis())
-                onboardingStage="done"
-                onboardingBusy=false
-            }
+            },
+            {dateDialog=false}
+        )
+        return
+    }
+
+    if(datingPending){
+        DatingPendingScreen(onComplete={onboardingStage="journey";datingMethod=DATING_ULTRASOUND},onChangeStage={onboardingStage="journey"})
+        return
+    }
+    if(!hasPregnancyDating){
+        CycleModeScreen(
+            stage=journeyStage,lastPeriod=lastPeriod,cycleLength=cycleLength,
+            onPickPeriodDate={datePickerTarget="period";dateDialog=true},
+            onCycleLength={value->cycleLength=value;scope.launch{context.pregnancyStore.edit{it[CycleLengthKey]=value.toString()}}},
+            onSwitchToPregnancy={journeyStage=STAGE_POSITIVE;datingMethod=DATING_LMP;onboardingStage="journey"},
+            onEditStage={onboardingStage="journey"}
+        )
+        if(dateDialog) DateDialogModern(LocalDate.now(),{newDate->
+            dateDialog=false;lastPeriod=newDate
+            scope.launch{context.pregnancyStore.edit{it[LastPeriodKey]=newDate.toString()}}
         },{dateDialog=false})
         return
     }
