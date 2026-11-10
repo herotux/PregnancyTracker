@@ -574,7 +574,7 @@ fun PregnancyApp(){
                         driveEmail=driveEmail,
                         firebaseEmail=firebaseEmail,
                         onFirebaseSignIn={signInFirebaseWithGoogle()},
-                        onFirebaseSignOut={FirebaseAuth.getInstance().signOut();GoogleSignIn.getClient(activity,GoogleSignInOptions.DEFAULT_SIGN_IN).signOut();firebaseEmail=null;syncStatus="از حساب Firebase خارج شدی"},
+                        onFirebaseSignOut={FirebaseAuth.getInstance().signOut();GoogleSignIn.getClient(activity,GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestEmail().build()).signOut();firebaseEmail=null;syncStatus="از حساب Firebase خارج شدی"},
                         syncStatus=syncStatus,
                         onConnect={authorizeDrive("sync")},
                         onShare={shareDialog=true},
