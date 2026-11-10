@@ -44,9 +44,9 @@ fun NonoRoleScreen(hasLocalProfile: Boolean, onRole: (String) -> Unit, onBack: (
     Column(Modifier.fillMaxSize().padding(horizontal = 22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text("نقش شما در مسیر سلامت باروری چیست؟", fontFamily = Fa, fontSize = 23.sp, fontWeight = FontWeight.Bold)
         Text(if (hasLocalProfile) "اطلاعات بارداری فعلی حفظ می‌شود." else "نقش فقط برای شخصی‌سازی تجربه نونو است.", fontFamily = Fa, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp))
-        RoleOption(Icons.Default.Person, "مادر", "مدیریت چرخه قاعدگی، باروری و پرونده سلامت") { onRole("mother") }
+        RoleOption(Icons.Default.Person, "کاربر اصلی", "ثبت چرخه قاعدگی، باروری و پرونده سلامت") { onRole("mother") }
         Spacer(Modifier.height(12.dp))
-        RoleOption(Icons.Default.Face, "پدر", "همراهی در مسیر برنامه‌ریزی، بارداری و سلامت خانواده") { onRole("father") }
+        RoleOption(Icons.Default.Face, "همراه / شریک زندگی", "همراهی در مسیر برنامه‌ریزی، بارداری و سلامت خانواده") { onRole("father") }
         TextButton(onClick = onBack, modifier = Modifier.padding(top = 12.dp)) { Text("بازگشت", fontFamily = Fa) }
     }
 }
