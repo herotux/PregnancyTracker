@@ -13,6 +13,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -53,7 +55,7 @@ private val CalendarEntriesKey = stringPreferencesKey("entries")
 private const val CALENDAR_CHANNEL = "nono_calendar_events"
 private const val CALENDAR_EXTRA_ID = "calendar_entry_id"
 private const val CALENDAR_EXTRA_SNOOZE = "calendar_snooze"
-private const val SNOOZE_REQUEST_OFFSET = 1_500_000_000
+private const val SNOOZE_REQUEST_OFFSET = 1_000_000_000
 
 data class CalendarEntry(
     val id: Long,
@@ -347,7 +349,7 @@ fun CalendarModern(
                                                 if (isToday) Text("امروز", fontFamily = Fa, fontSize = 7.sp, color = if (isDue) Color.White else RoseDark)
                                                 if (hasEntries) Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                                     repeat(minOf(3, entries.count { it.date == date })) {
-                                                        Surface(Modifier.size(4.dp), shape = CircleShape, color = if (isDue) Color.White else Rose)
+                                                        Box(Modifier.size(4.dp).background(if (isDue) Color.White else Rose, CircleShape))
                                                     }
                                                 }
                                             }
