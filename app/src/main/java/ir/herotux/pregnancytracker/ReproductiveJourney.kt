@@ -260,7 +260,9 @@ internal fun CycleModeScreen(
     onEditStage: () -> Unit,
     cycleLogs: List<CycleDayLog>,
     onSaveCycleLog: (CycleDayLog) -> Unit,
-    onDeleteCycleLog: (String) -> Unit
+    onDeleteCycleLog: (String) -> Unit,
+    preconceptionDone: Set<Int>,
+    onPreconceptionToggle: (Int, Boolean) -> Unit
 ) {
     val nextPeriod = lastPeriod?.plusDays(cycleLength.toLong())
     val ovulation = lastPeriod?.plusDays((cycleLength - 14).toLong())
@@ -317,6 +319,9 @@ internal fun CycleModeScreen(
                 onSave = onSaveCycleLog,
                 onDelete = onDeleteCycleLog
             )
+        }
+        if (stage == STAGE_PLANNING || stage == STAGE_TTC) item {
+            PreconceptionSection(completed = preconceptionDone, onToggle = onPreconceptionToggle)
         }
         item {
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
