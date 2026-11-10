@@ -2,6 +2,13 @@ name: Build APK
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - "app/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/build-apk.yml"
   workflow_dispatch:
 permissions:
   contents: read
