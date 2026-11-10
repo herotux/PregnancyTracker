@@ -17,6 +17,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+      # Keep the CI debug signing certificate stable between builds.
+      # The cache is created on the first successful build and restored on later runs.
+      - name: Restore stable Android debug keystore
+        id: debug-keystore-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
       - name: Verify Gradle
         run: gradle --version
       - name: Download Vazirmatn fonts
