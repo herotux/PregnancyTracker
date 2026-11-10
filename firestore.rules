@@ -27,7 +27,7 @@ service cloud.firestore {
 
     // Minimal public identity: only display name, username and avatar metadata are exposed.
     match /publicProfiles/{uid} {
-      allow get, list: if signedIn();
+      allow get: if signedIn();
       allow create: if signedIn()
         && request.auth.uid == uid
         && request.resource.data.keys().hasOnly([
