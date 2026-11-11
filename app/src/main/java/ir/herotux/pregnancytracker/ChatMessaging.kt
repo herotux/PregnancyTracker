@@ -180,13 +180,12 @@ object NonoMessaging {
     fun listenFriendRequests(uid: String, onChange: (List<NonoFriendRequest>) -> Unit, onError: (String) -> Unit): ListenerRegistration =
         db.collection("friendRequests")
             .whereEqualTo("recipientUid", uid)
-            .whereEqualTo("status", "pending")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     onError(error.localizedMessage ?: "دریافت درخواست‌های دوستی ناموفق بود")
                     return@addSnapshotListener
                 }
-                onChange(snapshot?.documents.orEmpty().map { doc ->
+                onChange(snapshot?.documents.orEmpty().filter { it.getString("status") == "pending" }.map { doc ->
                     NonoFriendRequest(
                         doc.id,
                         doc.getString("senderUid") ?: "",
@@ -841,7 +840,7 @@ fun NonoNotificationsScreen(
             onDispose { reg.remove() }
         }
     }
-    Column(Modifier.fillMaxSize().padding(contentPadding).padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().padding(contentPadding).padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, "بازگشت") }
             Text("اعلان‌ها", fontFamily = Fa, fontSize = 22.sp, fontWeight = FontWeight.Bold)
