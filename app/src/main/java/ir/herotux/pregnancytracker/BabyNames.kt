@@ -97,7 +97,6 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
       IconButton(onClick={if(targetList.isNotBlank())append(targetList,n)else addName=n},enabled=savedLists.isNotEmpty()){Icon(Icons.Default.Add,"افزودن به فهرست",tint=RoseDark)}
      }}
     }
-   }
   }else if(active==null){
    item { Row(Modifier.fillMaxWidth().padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically){Text("فهرست‌های شخصی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,modifier=Modifier.weight(1f));Button(onClick={createDialog=true},shape=RoundedCornerShape(14.dp)){Icon(Icons.Default.Add,null);Text("فهرست جدید",fontFamily=Fa)}} }
    if(savedLists.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(top=30.dp),horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.Bookmark,null,tint=RoseDark,modifier=Modifier.size(40.dp));Text("هنوز فهرستی نساخته‌ای",fontFamily=Fa,fontWeight=FontWeight.Bold);Text("مثل «اسم‌های محبوب» یا «انتخاب نهایی».",fontFamily=Fa,fontSize=12.sp)} }
