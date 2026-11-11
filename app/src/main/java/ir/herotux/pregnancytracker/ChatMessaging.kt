@@ -142,27 +142,14 @@ object NonoMessaging {
 
     suspend fun sendFriendRequest(senderUid: String, recipientUid: String) = withContext(Dispatchers.IO) {
         require(senderUid != recipientUid) { "نمی‌توانی خودت را به فهرست دوستان اضافه کنی." }
-        val members = listOf(senderUid, recipientUid).sorted()
-        val friendshipRef = db.collection("friendships").document(members.joinToString("_"))
         val requestRef = db.collection("friendRequests").document("${senderUid}_${recipientUid}")
-        Tasks.await(db.runTransaction { tx ->
-            if (tx.get(friendshipRef).exists()) throw IllegalStateException("این کاربر از قبل در فهرست دوستانت است.")
-            val existing = tx.get(requestRef)
-            if (existing.exists() && existing.getString("status") == "pending") {
-                throw IllegalStateException("درخواست دوستی قبلاً ارسال شده است.")
-            }
-            if (existing.exists() && existing.getString("status") == "accepted") {
-                throw IllegalStateException("این کاربر از قبل در فهرست دوستانت است.")
-            }
-            tx.set(requestRef, mapOf(
-                "senderUid" to senderUid,
-                "recipientUid" to recipientUid,
-                "status" to "pending",
-                "createdAt" to FieldValue.serverTimestamp(),
-                "updatedAt" to FieldValue.serverTimestamp()
-            ))
-            true
-        })
+        Tasks.await(requestRef.set(mapOf(
+            "senderUid" to senderUid,
+            "recipientUid" to recipientUid,
+            "status" to "pending",
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )))
     }
 
     fun listenFriends(uid: String, onChange: (List<String>) -> Unit, onError: (String) -> Unit): ListenerRegistration =
