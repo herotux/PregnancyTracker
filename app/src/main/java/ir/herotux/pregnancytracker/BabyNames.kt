@@ -72,6 +72,7 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
  Column(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp)) {
   Text("بانک اسامی",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=8.dp))
   Text("اسم‌ها را پیدا کن، در فهرست‌های دلخواهت نگه دار و برایشان یادداشت بنویس.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp,bottom=10.dp))
+  Text(fa(bankNames.size)+" اسم • "+fa(bankNames.count{it.gender=="دختر"})+" دخترانه • "+fa(bankNames.count{it.gender=="پسر"})+" پسرانه",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.padding(bottom=8.dp))
   ScrollableTabRow(selectedTabIndex=tab,edgePadding=0.dp){Tab(selected=tab==0,onClick={tab=0;activeId=null},text={Text("بانک نام‌ها",fontFamily=Fa)});Tab(selected=tab==1,onClick={tab=1;activeId=null},text={Text("فهرست‌های من",fontFamily=Fa)})}
   if(tab==0){
    Row(Modifier.fillMaxWidth().padding(top=10.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(gender=="دختر",{gender="دختر"},{Text("دخترانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Favorite,null)});FilterChip(gender=="پسر",{gender="پسر"},{Text("پسرانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Person,null)})}
@@ -86,7 +87,7 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
    LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
     items(bankNames.filter{it.gender==gender&&(query.isBlank()||it.name.contains(query,true)||it.meaning.contains(query,true))},key={it.id}){n->
      Card(shape=RoundedCornerShape(16.dp)){Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically){
-      Column(Modifier.weight(1f)){Text(n.name,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp);if(n.meaning.isNotBlank())Text(n.meaning+" • "+n.origin,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) else Text("معنی و ریشه هنوز بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+      Column(Modifier.weight(1f)){Text(n.name,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp);when{n.meaning.isNotBlank()&&n.origin.isNotBlank()->Text(n.meaning+" • "+n.origin,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.meaning.isNotBlank()->Text(n.meaning,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.origin.isNotBlank()->Text("ریشه: "+n.origin+" • معنی بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);else->Text("معنی و ریشه هنوز بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
       IconButton(onClick={if(targetList.isNotBlank())append(targetList,n)else addName=n},enabled=savedLists.isNotEmpty()){Icon(Icons.Default.Add,"افزودن به فهرست",tint=RoseDark)}
      }}
     }
