@@ -81,14 +81,44 @@ object NonoUpdateService {
     }
 
     fun isNewer(latestTag: String, currentVersion: String): Boolean {
-        fun parts(value: String) = value.trim().removePrefix("v").substringBefore("-")
-            .split(".").map { it.toIntOrNull() ?: 0 }
-        val latest = parts(latestTag)
-        val current = parts(currentVersion)
-        for (i in 0 until maxOf(latest.size, current.size)) {
-            val a = latest.getOrElse(i) { 0 }
-            val b = current.getOrElse(i) { 0 }
+        data class Version(val core: List<Int>, val prerelease: List<String>?)
+
+        fun parse(value: String): Version? {
+            val normalized = value.trim().removePrefix("v").substringBefore("+")
+            val pieces = normalized.split("-", limit = 2)
+            val core = pieces[0].split(".").map { it.toIntOrNull() ?: return null }
+            if (core.isEmpty()) return null
+            val prerelease = pieces.getOrNull(1)?.takeIf { it.isNotBlank() }?.split(".")
+            return Version(core, prerelease)
+        }
+
+        val latest = parse(latestTag) ?: return false
+        val current = parse(currentVersion) ?: return false
+
+        for (i in 0 until maxOf(latest.core.size, current.core.size)) {
+            val a = latest.core.getOrElse(i) { 0 }
+            val b = current.core.getOrElse(i) { 0 }
             if (a != b) return a > b
+        }
+
+        // A stable release is newer than any prerelease of the same core version.
+        if (latest.prerelease == null) return current.prerelease != null
+        if (current.prerelease == null) return false
+
+        for (i in 0 until maxOf(latest.prerelease.size, current.prerelease.size)) {
+            if (i >= latest.prerelease.size) return false
+            if (i >= current.prerelease.size) return true
+            val a = latest.prerelease[i]
+            val b = current.prerelease[i]
+            if (a == b) continue
+            val an = a.toLongOrNull()
+            val bn = b.toLongOrNull()
+            return when {
+                an != null && bn != null -> an > bn
+                an != null -> false // Numeric identifiers sort before non-numeric ones.
+                bn != null -> true
+                else -> a > b
+            }
         }
         return false
     }
