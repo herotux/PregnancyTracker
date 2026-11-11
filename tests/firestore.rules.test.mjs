@@ -13,8 +13,8 @@ import {
   updateDoc,
   serverTimestamp,
   query,
-  whereArrayContains,
   whereEqualTo,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { after, before, beforeEach, test } from "node:test";
@@ -415,12 +415,12 @@ test("friendship is created only when the recipient accepts the request atomical
 
   await assertSucceeds(getDocs(query(
     collection(recipientDb, "friendships"),
-    whereArrayContains("members", "friend-recipient")
+    where("members", "array-contains", "friend-recipient")
   )));
   const senderDb = env.authenticatedContext("friend-sender").firestore();
   await assertSucceeds(getDocs(query(
     collection(senderDb, "friendships"),
-    whereArrayContains("members", "friend-sender")
+    where("members", "array-contains", "friend-sender")
   )));
 });
 
