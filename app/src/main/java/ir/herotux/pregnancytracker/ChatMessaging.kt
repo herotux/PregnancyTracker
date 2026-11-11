@@ -2,6 +2,8 @@ package ir.herotux.pregnancytracker
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -60,6 +62,13 @@ data class NonoConversation(
     val lastSenderId: String,
     val updatedAt: Long,
     val unreadCount: Int
+)
+
+data class NonoFriendRequest(
+    val id: String,
+    val senderUid: String,
+    val recipientUid: String,
+    val status: String
 )
 
 object NonoMessaging {
@@ -128,6 +137,84 @@ object NonoMessaging {
         val uid = reservation.getString("uid") ?: return@withContext null
         if (uid == currentUid) return@withContext null
         getProfile(uid)
+    }
+
+
+    suspend fun sendFriendRequest(senderUid: String, recipientUid: String) = withContext(Dispatchers.IO) {
+        require(senderUid != recipientUid) { "نمی‌توانی خودت را به فهرست دوستان اضافه کنی." }
+        val members = listOf(senderUid, recipientUid).sorted()
+        val friendshipRef = db.collection("friendships").document(members.joinToString("_"))
+        val requestRef = db.collection("friendRequests").document("${senderUid}_${recipientUid}")
+        Tasks.await(db.runTransaction { tx ->
+            if (tx.get(friendshipRef).exists()) throw IllegalStateException("این کاربر از قبل در فهرست دوستانت است.")
+            val existing = tx.get(requestRef)
+            if (existing.exists() && existing.getString("status") == "pending") {
+                throw IllegalStateException("درخواست دوستی قبلاً ارسال شده است.")
+            }
+            if (existing.exists() && existing.getString("status") == "accepted") {
+                throw IllegalStateException("این کاربر از قبل در فهرست دوستانت است.")
+            }
+            tx.set(requestRef, mapOf(
+                "senderUid" to senderUid,
+                "recipientUid" to recipientUid,
+                "status" to "pending",
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ))
+            true
+        })
+    }
+
+    fun listenFriends(uid: String, onChange: (List<String>) -> Unit, onError: (String) -> Unit): ListenerRegistration =
+        db.collection("friendships").whereArrayContains("members", uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    onError(error.localizedMessage ?: "دریافت فهرست دوستان ناموفق بود")
+                    return@addSnapshotListener
+                }
+                onChange(snapshot?.documents.orEmpty().mapNotNull { doc ->
+                    (doc.get("members") as? List<*>)?.filterIsInstance<String>()?.firstOrNull { it != uid }
+                })
+            }
+
+    fun listenFriendRequests(uid: String, onChange: (List<NonoFriendRequest>) -> Unit, onError: (String) -> Unit): ListenerRegistration =
+        db.collection("friendRequests")
+            .whereEqualTo("recipientUid", uid)
+            .whereEqualTo("status", "pending")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    onError(error.localizedMessage ?: "دریافت درخواست‌های دوستی ناموفق بود")
+                    return@addSnapshotListener
+                }
+                onChange(snapshot?.documents.orEmpty().map { doc ->
+                    NonoFriendRequest(
+                        doc.id,
+                        doc.getString("senderUid") ?: "",
+                        doc.getString("recipientUid") ?: "",
+                        doc.getString("status") ?: "pending"
+                    )
+                })
+            }
+
+    suspend fun respondFriendRequest(request: NonoFriendRequest, accept: Boolean) = withContext(Dispatchers.IO) {
+        require(request.status == "pending") { "این درخواست دیگر فعال نیست." }
+        val batch = db.batch()
+        val requestRef = db.collection("friendRequests").document(request.id)
+        batch.update(requestRef, mapOf(
+            "status" to if (accept) "accepted" else "rejected",
+            "updatedAt" to FieldValue.serverTimestamp()
+        ))
+        if (accept) {
+            val members = listOf(request.senderUid, request.recipientUid).sorted()
+            val friendshipRef = db.collection("friendships").document(members.joinToString("_"))
+            batch.set(friendshipRef, mapOf(
+                "members" to members,
+                "requestId" to request.id,
+                "createdBy" to request.recipientUid,
+                "createdAt" to FieldValue.serverTimestamp()
+            ))
+        }
+        Tasks.await(batch.commit())
     }
 
     suspend fun openConversation(uid: String, otherUid: String): String = withContext(Dispatchers.IO) {
@@ -223,7 +310,9 @@ fun MessagingCenterScreen(
     onOpenChat: (NonoConversation, NonoPublicProfile) -> Unit,
     onProfile: () -> Unit,
     onSignIn: () -> Unit,
-    onNotifications: () -> Unit
+    onNotifications: () -> Unit,
+    onFriends: () -> Unit = {},
+    contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     var conversations by remember { mutableStateOf(emptyList<NonoConversation>()) }
     var profiles by remember { mutableStateOf<Map<String, NonoPublicProfile>>(emptyMap()) }
@@ -261,7 +350,7 @@ fun MessagingCenterScreen(
     }
 
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        Modifier.fillMaxSize().padding(contentPadding).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(top = 12.dp, bottom = 28.dp)
     ) {
@@ -282,6 +371,11 @@ fun MessagingCenterScreen(
         item {
             Button(onClick = { searchOpen = !searchOpen; searchError = null; found = null }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
                 Icon(Icons.Default.Edit, null); Spacer(Modifier.width(8.dp)); Text("نوشتن پیام جدید", fontFamily = Fa)
+            }
+        }
+        item {
+            OutlinedButton(onClick = onFriends, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
+                Icon(Icons.Default.People, null); Spacer(Modifier.width(8.dp)); Text("جست‌وجوی کاربران و دوستان", fontFamily = Fa)
             }
         }
         if (searchOpen) item {
@@ -373,8 +467,282 @@ fun MessagingCenterScreen(
     }
 }
 
+
 @Composable
-fun NonoProfileScreen(uid: String?, onBack: () -> Unit, onSignIn: () -> Unit) {
+fun NonoFriendsScreen(
+    uid: String?,
+    onBack: () -> Unit,
+    onSignIn: () -> Unit,
+    onOpenChat: (NonoConversation, NonoPublicProfile) -> Unit,
+    contentPadding: PaddingValues = PaddingValues(0.dp)
+) {
+    var friends by remember { mutableStateOf(emptyList<String>()) }
+    var friendProfiles by remember { mutableStateOf<Map<String, NonoPublicProfile>>(emptyMap()) }
+    var requests by remember { mutableStateOf(emptyList<NonoFriendRequest>()) }
+    var requestProfiles by remember { mutableStateOf<Map<String, NonoPublicProfile>>(emptyMap()) }
+    var username by remember { mutableStateOf("") }
+    var found by remember { mutableStateOf<NonoPublicProfile?>(null) }
+    var searchBusy by remember { mutableStateOf(false) }
+    var requestBusy by remember { mutableStateOf(false) }
+    var busyRequestId by remember { mutableStateOf<String?>(null) }
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    DisposableEffect(uid) {
+        if (uid == null) {
+            onDispose { }
+        } else {
+            val friendsRegistration = NonoMessaging.listenFriends(uid, { ids ->
+                friends = ids
+                ids.filter { !friendProfiles.containsKey(it) }.forEach { friendUid ->
+                    scope.launch {
+                        NonoMessaging.getProfile(friendUid)?.let {
+                            friendProfiles = friendProfiles + (friendUid to it)
+                        }
+                    }
+                }
+            }, { error = it })
+            val requestsRegistration = NonoMessaging.listenFriendRequests(uid, { list ->
+                requests = list
+                list.map { it.senderUid }.filter { !requestProfiles.containsKey(it) }.distinct().forEach { senderUid ->
+                    scope.launch {
+                        NonoMessaging.getProfile(senderUid)?.let {
+                            requestProfiles = requestProfiles + (senderUid to it)
+                        }
+                    }
+                }
+            }, { error = it })
+            onDispose {
+                friendsRegistration.remove()
+                requestsRegistration.remove()
+            }
+        }
+    }
+
+    if (uid == null) {
+        Column(
+            Modifier.fillMaxSize().padding(contentPadding).padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(Icons.Default.Lock, null, tint = RoseDark, modifier = Modifier.size(48.dp))
+            Text("برای جست‌وجوی کاربران و مدیریت دوستان وارد حساب Google شو.", fontFamily = Fa, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Button(onClick = onSignIn) { Text("ورود با Google", fontFamily = Fa) }
+        }
+        return
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize().padding(contentPadding).padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 28.dp)
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, "بازگشت") }
+                Column(Modifier.weight(1f)) {
+                    Text("کاربران و دوستان", fontFamily = Fa, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("با نام کاربری جست‌وجو کن و درخواست دوستی بفرست", fontFamily = Fa, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item {
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("جست‌وجوی کاربران", fontFamily = Fa, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = {
+                            username = it.lowercase(Locale.ROOT).removePrefix("@")
+                                .filter { c -> c in 'a'..'z' || c in '0'..'9' || c == '_' }.take(20)
+                            found = null
+                            error = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("نام کاربری (مثلاً sara_2026)", fontFamily = Fa) },
+                        leadingIcon = { Text("@", fontWeight = FontWeight.Bold) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, capitalization = KeyboardCapitalization.None)
+                    )
+                    Button(
+                        onClick = {
+                            searchBusy = true
+                            error = null
+                            found = null
+                            scope.launch {
+                                runCatching { NonoMessaging.findUser(username, uid) }
+                                    .onSuccess {
+                                        found = it
+                                        if (it == null) error = "کاربری با این نام کاربری پیدا نشد."
+                                    }
+                                    .onFailure { error = it.message ?: "جست‌وجوی کاربر ناموفق بود." }
+                                searchBusy = false
+                            }
+                        },
+                        enabled = username.length >= 3 && !searchBusy,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (searchBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Text("جست‌وجو", fontFamily = Fa)
+                    }
+                    found?.let { profile ->
+                        HorizontalDivider()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            NonoAvatar(profile, 52.dp)
+                            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                Text(profile.displayName, fontFamily = Fa, fontWeight = FontWeight.Bold)
+                                Text("@${profile.username}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (profile.uid in friends) {
+                                OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.Check, null); Spacer(Modifier.width(5.dp)); Text("در فهرست دوستان", fontFamily = Fa)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        requestBusy = true
+                                        error = null
+                                        scope.launch {
+                                            runCatching { NonoMessaging.sendFriendRequest(uid, profile.uid) }
+                                                .onSuccess { error = "درخواست دوستی ارسال شد." }
+                                                .onFailure { error = it.message ?: "ارسال درخواست ناموفق بود." }
+                                            requestBusy = false
+                                        }
+                                    },
+                                    enabled = !requestBusy,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    if (requestBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    else { Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(5.dp)); Text("افزودن به دوستان", fontFamily = Fa) }
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch {
+                                        runCatching { NonoMessaging.openConversation(uid, profile.uid) }
+                                            .onSuccess {
+                                                onOpenChat(NonoConversation(it, listOf(uid, profile.uid), "", "", System.currentTimeMillis(), 0), profile)
+                                            }
+                                            .onFailure { error = it.message ?: "باز کردن گفت‌وگو ناموفق بود." }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Chat, null); Spacer(Modifier.width(5.dp)); Text("پیام", fontFamily = Fa)
+                            }
+                        }
+                    }
+                    error?.let {
+                        Text(it, fontFamily = Fa, fontSize = 12.sp, color = if (it.contains("ارسال شد")) RoseDark else MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+        item {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf("دوستان (${friends.size})", "درخواست‌ها (${requests.size})").forEachIndexed { index, label ->
+                    SegmentedButton(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        shape = SegmentedButtonDefaults.itemShape(index, 2)
+                    ) { Text(label, fontFamily = Fa, fontSize = 12.sp) }
+                }
+            }
+        }
+        if (selectedTab == 0) {
+            if (friends.isEmpty()) item {
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Blush)) {
+                    Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.PeopleOutline, null, tint = RoseDark, modifier = Modifier.size(34.dp))
+                        Text("هنوز دوستی اضافه نکرده‌ای", fontFamily = Fa, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        Text("از کادر جست‌وجو، نام کاربری افراد را پیدا کن و درخواست دوستی بفرست.", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
+                }
+            }
+            items(friends, key = { it }) { friendUid ->
+                val profile = friendProfiles[friendUid]
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        if (profile != null) scope.launch {
+                            runCatching { NonoMessaging.openConversation(uid, friendUid) }
+                                .onSuccess { onOpenChat(NonoConversation(it, listOf(uid, friendUid), "", "", System.currentTimeMillis(), 0), profile) }
+                                .onFailure { error = it.message ?: "باز کردن گفت‌وگو ناموفق بود." }
+                        }
+                    },
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                        NonoAvatar(profile)
+                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                            Text(profile?.displayName ?: "کاربر نونو", fontFamily = Fa, fontWeight = FontWeight.Bold)
+                            Text(profile?.username?.let { "@$it" } ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Default.Chat, null, tint = RoseDark)
+                    }
+                }
+            }
+        } else {
+            if (requests.isEmpty()) item {
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Blush)) {
+                    Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.PersonAddAlt1, null, tint = RoseDark, modifier = Modifier.size(34.dp))
+                        Text("درخواست دوستی جدیدی نداری", fontFamily = Fa, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            }
+            items(requests, key = { it.id }) { request ->
+                val profile = requestProfiles[request.senderUid]
+                Card(shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            NonoAvatar(profile)
+                            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                Text(profile?.displayName ?: "کاربر نونو", fontFamily = Fa, fontWeight = FontWeight.Bold)
+                                Text(profile?.username?.let { "@$it" } ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    busyRequestId = request.id
+                                    scope.launch {
+                                        runCatching { NonoMessaging.respondFriendRequest(request, true) }
+                                            .onFailure { error = it.message ?: "پذیرفتن درخواست ناموفق بود." }
+                                        busyRequestId = null
+                                    }
+                                },
+                                enabled = busyRequestId == null,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (busyRequestId == request.id) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                else Text("پذیرفتن", fontFamily = Fa)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    busyRequestId = request.id
+                                    scope.launch {
+                                        runCatching { NonoMessaging.respondFriendRequest(request, false) }
+                                            .onFailure { error = it.message ?: "رد درخواست ناموفق بود." }
+                                        busyRequestId = null
+                                    }
+                                },
+                                enabled = busyRequestId == null,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("رد کردن", fontFamily = Fa) }
+                        }
+                    }
+                }
+            }
+        }
+        error?.let { message -> item { Text(message, fontFamily = Fa, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) } }
+    }
+}
+
+@Composable
+fun NonoProfileScreen(uid: String?, onBack: () -> Unit, onSignIn: () -> Unit, contentPadding: PaddingValues = PaddingValues(0.dp)) {
     var profile by remember { mutableStateOf<NonoPublicProfile?>(null) }
     var displayName by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
@@ -392,7 +760,7 @@ fun NonoProfileScreen(uid: String?, onBack: () -> Unit, onSignIn: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, "بازگشت") }
             Text("پروفایل من", fontFamily = Fa, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -456,7 +824,8 @@ fun NonoProfileScreen(uid: String?, onBack: () -> Unit, onSignIn: () -> Unit) {
 fun NonoNotificationsScreen(
     uid: String?,
     onBack: () -> Unit,
-    onOpenChat: (NonoConversation, NonoPublicProfile) -> Unit
+    onOpenChat: (NonoConversation, NonoPublicProfile) -> Unit,
+    contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     var conversations by remember { mutableStateOf(emptyList<NonoConversation>()) }
     var profiles by remember { mutableStateOf<Map<String, NonoPublicProfile>>(emptyMap()) }
@@ -472,7 +841,7 @@ fun NonoNotificationsScreen(
             onDispose { reg.remove() }
         }
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(Modifier.fillMaxSize().padding(contentPadding).padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, "بازگشت") }
             Text("اعلان‌ها", fontFamily = Fa, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -514,7 +883,8 @@ fun NonoChatThreadScreen(
     uid: String,
     conversation: NonoConversation,
     other: NonoPublicProfile,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     var messages by remember { mutableStateOf(emptyList<NonoMessage>()) }
     var text by remember { mutableStateOf("") }
@@ -528,7 +898,7 @@ fun NonoChatThreadScreen(
     }
     LaunchedEffect(conversation.id, uid, messages.size) { runCatching { NonoMessaging.markRead(conversation.id, uid) } }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+    Column(Modifier.fillMaxSize().padding(contentPadding).padding(horizontal = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, "بازگشت") }
             NonoAvatar(other, 40.dp)
