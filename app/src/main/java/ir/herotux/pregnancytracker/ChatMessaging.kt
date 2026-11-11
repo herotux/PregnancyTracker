@@ -341,17 +341,9 @@ fun MessagingCenterScreen(
         contentPadding = PaddingValues(top = 12.dp, bottom = 28.dp)
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("پیام‌های من", fontFamily = Fa, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text("گفت‌وگوهای خصوصی و پیام‌های کاربران", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = onNotifications) {
-                    BadgedBox(badge = { if (conversations.sumOf { it.unreadCount } > 0) Badge { Text(conversations.sumOf { it.unreadCount }.toString()) } }) {
-                        Icon(Icons.Default.Notifications, contentDescription = "اعلان‌ها")
-                    }
-                }
-                IconButton(onClick = onProfile) { Icon(Icons.Default.AccountCircle, contentDescription = "پروفایل") }
+            Column(Modifier.fillMaxWidth()) {
+                Text("پیام‌های من", fontFamily = Fa, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("گفت‌وگوهای خصوصی و پیام‌های کاربران", fontFamily = Fa, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
