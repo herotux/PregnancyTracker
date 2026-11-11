@@ -1,5 +1,6 @@
 package ir.herotux.pregnancytracker
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -61,7 +62,7 @@ fun decodeBabyNameLists(raw:String?):List<BabyNameList> = runCatching {
  }
 }.getOrDefault(emptyList())
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->Unit,pad:PaddingValues) {
  val context=LocalContext.current
@@ -100,7 +101,7 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
   }else if(active==null){
    item { Row(Modifier.fillMaxWidth().padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically){Text("فهرست‌های شخصی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,modifier=Modifier.weight(1f));Button(onClick={createDialog=true},shape=RoundedCornerShape(14.dp)){Icon(Icons.Default.Add,null);Text("فهرست جدید",fontFamily=Fa)}} }
    if(savedLists.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(top=30.dp),horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.Bookmark,null,tint=RoseDark,modifier=Modifier.size(40.dp));Text("هنوز فهرستی نساخته‌ای",fontFamily=Fa,fontWeight=FontWeight.Bold);Text("مثل «اسم‌های محبوب» یا «انتخاب نهایی».",fontFamily=Fa,fontSize=12.sp)} }
-   else items(savedLists,key={it.id}){l->Card(Modifier.fillMaxWidth().clickable{activeId=l.id},shape=RoundedCornerShape(17.dp)){Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Bookmark,null,tint=RoseDark);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text(l.title,fontFamily=Fa,fontWeight=FontWeight.Bold);Text(fa(l.items.size)+" اسم",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)};Icon(Icons.Default.ChevronLeft,null)}}}}
+   else items(savedLists,key={it.id}){l->Card(Modifier.fillMaxWidth().clickable{activeId=l.id},shape=RoundedCornerShape(17.dp)){Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Bookmark,null,tint=RoseDark);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text(l.title,fontFamily=Fa,fontWeight=FontWeight.Bold);Text(fa(l.items.size)+" اسم",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)};Icon(Icons.Default.ChevronLeft,null)}}}
   }else{
    item { Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={activeId=null}){Icon(Icons.Default.ArrowBack,"بازگشت")};Column(Modifier.weight(1f)){Text(active.title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp);Text(fa(active.items.size)+" اسم",fontFamily=Fa,fontSize=11.sp)};IconButton(onClick={customDialog=true}){Icon(Icons.Default.Add,"افزودن اسم دلخواه")}} }
    if(active.items.isEmpty()) item { Text("این فهرست خالی است؛ از بانک اسم انتخاب کن یا اسم دلخواهت را اضافه کن.",fontFamily=Fa,fontSize=13.sp,modifier=Modifier.padding(top=14.dp)) }
