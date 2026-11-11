@@ -1,6 +1,8 @@
 package ir.herotux.pregnancytracker
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,7 +21,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-data class BabyName(val id:String,val name:String,val gender:String,val meaning:String="",val origin:String="")
+data class BabyName(val id:String,val name:String,val gender:String,val meaning:String="",val origin:String="",val english:String="",val genderConflict:Boolean=false)
 data class SavedBabyName(val id:String,val name:String,val gender:String,val meaning:String="",val origin:String="",val note:String="",val custom:Boolean=false)
 data class BabyNameList(val id:String,val title:String,val items:List<SavedBabyName>)
 
@@ -38,9 +40,13 @@ private val starterNamesFallback=listOf(
 
 
 private fun readBabyNameBank(context:android.content.Context):List<BabyName> = runCatching {
- val json=JSONObject(context.assets.open("names_bank.json").bufferedReader().use{it.readText()})
- val array=json.getJSONArray("names")
- (0 until array.length()).map { i -> val n=array.getJSONObject(i);BabyName(n.optString("id"),n.optString("name"),n.optString("gender"),n.optString("meaning"),n.optString("origin")) }
+ val all=JSONArray()
+ listOf("names_bank.json","names_bank_2.json","names_bank_3.json").forEach { file ->
+  val json=JSONObject(context.assets.open(file).bufferedReader().use{it.readText()})
+  val array=json.getJSONArray("names")
+  for(i in 0 until array.length())all.put(array.getJSONObject(i))
+ }
+ (0 until all.length()).map { i -> val n=all.getJSONObject(i);BabyName(n.optString("id"),n.optString("name"),n.optString("gender"),n.optString("meaning"),n.optString("origin"),n.optString("english"),n.optBoolean("genderConflict")) }
 }.getOrDefault(starterNamesFallback)
 
 fun encodeBabyNameLists(lists:List<BabyNameList>):String {
@@ -60,6 +66,7 @@ fun decodeBabyNameLists(raw:String?):List<BabyNameList> = runCatching {
 fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->Unit,pad:PaddingValues) {
  val context=LocalContext.current
  val bankNames=remember { readBabyNameBank(context) }
+  val filteredNames=remember(bankNames,gender,query){bankNames.filter{it.gender==gender&&(query.isBlank()||it.name.contains(query,true)||it.meaning.contains(query,true)||it.english.contains(query,true))}}
  var moveNameId by remember { mutableStateOf<String?>(null) }
  var tab by remember { mutableIntStateOf(0) };var gender by remember { mutableStateOf("دختر") };var query by remember { mutableStateOf("") }
  var activeId by remember { mutableStateOf<String?>(null) };var listTitle by remember { mutableStateOf("") };var createDialog by remember { mutableStateOf(false) }
@@ -72,10 +79,10 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
  Column(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp)) {
   Text("بانک اسامی",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=8.dp))
   Text("اسم‌ها را پیدا کن، در فهرست‌های دلخواهت نگه دار و برایشان یادداشت بنویس.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp,bottom=10.dp))
-  Text(fa(bankNames.size)+" اسم • "+fa(bankNames.count{it.gender=="دختر"})+" دخترانه • "+fa(bankNames.count{it.gender=="پسر"})+" پسرانه",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.padding(bottom=8.dp))
+  Text(fa(bankNames.size)+" اسم • دختر: "+fa(bankNames.count{it.gender=="دختر"})+" • پسر: "+fa(bankNames.count{it.gender=="پسر"})+" • مشترک: "+fa(bankNames.count{it.gender=="مشترک"})+" • نامشخص: "+fa(bankNames.count{it.gender=="نامشخص"}),fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.padding(bottom=8.dp))
   ScrollableTabRow(selectedTabIndex=tab,edgePadding=0.dp){Tab(selected=tab==0,onClick={tab=0;activeId=null},text={Text("بانک نام‌ها",fontFamily=Fa)});Tab(selected=tab==1,onClick={tab=1;activeId=null},text={Text("فهرست‌های من",fontFamily=Fa)})}
   if(tab==0){
-   Row(Modifier.fillMaxWidth().padding(top=10.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(gender=="دختر",{gender="دختر"},{Text("دخترانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Favorite,null)});FilterChip(gender=="پسر",{gender="پسر"},{Text("پسرانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Person,null)})}
+   Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top=10.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(gender=="دختر",{gender="دختر"},{Text("دخترانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Favorite,null)});FilterChip(gender=="پسر",{gender="پسر"},{Text("پسرانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Person,null)});FilterChip(gender=="مشترک",{gender="مشترک"},{Text("مشترک",fontFamily=Fa)});FilterChip(gender=="نامشخص",{gender="نامشخص"},{Text("نامشخص",fontFamily=Fa)})}
    OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().padding(top=7.dp),label={Text("جست‌وجوی اسم",fontFamily=Fa)},singleLine=true,shape=RoundedCornerShape(14.dp))
    if(savedLists.isNotEmpty()){
     var expanded by remember{mutableStateOf(false)}
@@ -85,9 +92,9 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
     }
    }else Text("برای ذخیره اسم‌ها، ابتدا در «فهرست‌های من» یک فهرست بساز.",fontFamily=Fa,fontSize=12.sp,color=RoseDark,modifier=Modifier.padding(10.dp))
    LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
-    items(bankNames.filter{it.gender==gender&&(query.isBlank()||it.name.contains(query,true)||it.meaning.contains(query,true))},key={it.id}){n->
+    items(filteredNames,key={it.id}){n->
      Card(shape=RoundedCornerShape(16.dp)){Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically){
-      Column(Modifier.weight(1f)){Text(n.name,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp);when{n.meaning.isNotBlank()&&n.origin.isNotBlank()->Text(n.meaning+" • "+n.origin,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.meaning.isNotBlank()->Text(n.meaning,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.origin.isNotBlank()->Text("ریشه: "+n.origin+" • معنی بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);else->Text("معنی و ریشه هنوز بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
+      Column(Modifier.weight(1f)){Text(n.name,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp);if(n.english.isNotBlank())Text(n.english,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);when{n.meaning.isNotBlank()&&n.origin.isNotBlank()->Text(n.meaning+" • "+n.origin,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.meaning.isNotBlank()->Text(n.meaning,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.origin.isNotBlank()->Text("ریشه: "+n.origin+" • معنی بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);else->Text("معنی هنوز بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)};if(n.genderConflict)Text("درباره جنسیت این نام در منابع اختلاف وجود دارد",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.error)}
       IconButton(onClick={if(targetList.isNotBlank())append(targetList,n)else addName=n},enabled=savedLists.isNotEmpty()){Icon(Icons.Default.Add,"افزودن به فهرست",tint=RoseDark)}
      }}
     }
