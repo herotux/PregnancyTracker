@@ -13,7 +13,6 @@ import {
   updateDoc,
   serverTimestamp,
   query,
-  whereEqualTo,
   where,
   writeBatch,
 } from "firebase/firestore";
@@ -381,7 +380,7 @@ test("users can send friend requests, but unrelated accounts cannot read them", 
   await assertSucceeds(getDoc(doc(recipientDb, "friendRequests/friend-sender_friend-recipient")));
   await assertSucceeds(getDocs(query(
     collection(recipientDb, "friendRequests"),
-    whereEqualTo("recipientUid", "friend-recipient")
+    where("recipientUid", "==", "friend-recipient")
   )));
 
   const outsiderDb = env.authenticatedContext("friend-outsider").firestore();
