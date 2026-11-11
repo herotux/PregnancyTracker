@@ -12,6 +12,9 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  query,
+  whereArrayContains,
+  writeBatch,
 } from "firebase/firestore";
 import { after, before, beforeEach, test } from "node:test";
 
@@ -349,5 +352,80 @@ test("users cannot submit issue reports on behalf of another account or forge re
     device: "Android",
     status: "resolved",
     createdAt: serverTimestamp(),
+  }));
+});
+
+
+test("users can send friend requests, but unrelated accounts cannot read them", async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "publicProfiles/friend-recipient"), {
+      uid: "friend-recipient",
+      displayName: "دوست نمونه",
+      username: "friend_sample",
+      avatarKey: "🌸",
+    });
+  });
+
+  const senderDb = env.authenticatedContext("friend-sender").firestore();
+  const requestRef = doc(senderDb, "friendRequests/friend-sender_friend-recipient");
+  await assertSucceeds(setDoc(requestRef, {
+    senderUid: "friend-sender",
+    recipientUid: "friend-recipient",
+    status: "pending",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+
+  const recipientDb = env.authenticatedContext("friend-recipient").firestore();
+  await assertSucceeds(getDoc(requestRef));
+  await assertSucceeds(getDocs(collection(recipientDb, "friendRequests")));
+
+  const outsiderDb = env.authenticatedContext("friend-outsider").firestore();
+  await assertFails(getDoc(doc(outsiderDb, "friendRequests/friend-sender_friend-recipient")));
+});
+
+test("friendship is created only when the recipient accepts the request atomically", async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "friendRequests/friend-sender_friend-recipient"), {
+      senderUid: "friend-sender",
+      recipientUid: "friend-recipient",
+      status: "pending",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
+
+  const recipientDb = env.authenticatedContext("friend-recipient").firestore();
+  const batch = writeBatch(recipientDb);
+  batch.update(doc(recipientDb, "friendRequests/friend-sender_friend-recipient"), {
+    status: "accepted",
+    updatedAt: new Date(),
+  });
+  batch.set(doc(recipientDb, "friendships/friend-recipient_friend-sender"), {
+    members: ["friend-recipient", "friend-sender"],
+    requestId: "friend-sender_friend-recipient",
+    createdBy: "friend-recipient",
+    createdAt: new Date(),
+  });
+  await assertSucceeds(batch.commit());
+
+  await assertSucceeds(getDocs(query(
+    collection(recipientDb, "friendships"),
+    whereArrayContains("members", "friend-recipient")
+  )));
+  const senderDb = env.authenticatedContext("friend-sender").firestore();
+  await assertSucceeds(getDocs(query(
+    collection(senderDb, "friendships"),
+    whereArrayContains("members", "friend-sender")
+  )));
+});
+
+test("a user cannot create a friendship without accepting a matching friend request", async () => {
+  const db = env.authenticatedContext("friend-recipient").firestore();
+  await assertFails(setDoc(doc(db, "friendships/friend-recipient_friend-sender"), {
+    members: ["friend-recipient", "friend-sender"],
+    requestId: "missing-request",
+    createdBy: "friend-recipient",
+    createdAt: new Date(),
   }));
 });
