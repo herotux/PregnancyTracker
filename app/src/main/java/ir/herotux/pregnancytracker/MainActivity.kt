@@ -741,9 +741,10 @@ fun PregnancyApp(){
                     9->MessagingCenterScreen(
                         uid=currentUid,
                         onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
-                        onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11}
+                        onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11},onFriends={screen=15}
                     )
                     10->NonoProfileScreen(uid=currentUid,onBack={screen=0},onSignIn={signInFirebaseWithGoogle()})
+                    15->NonoFriendsScreen(uid=currentUid,onBack={screen=9},onSignIn={signInFirebaseWithGoogle()},onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12})
                     11->NonoNotificationsScreen(
                         uid=currentUid,onBack={screen=9},
                         onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12}
@@ -755,7 +756,7 @@ fun PregnancyApp(){
                         val other=activeOtherProfile
                         if(conversation!=null && other!=null && currentUid!=null)
                             NonoChatThreadScreen(currentUid,conversation,other,onBack={screen=9})
-                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11})
+                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11},onFriends={screen=15})
                     }
                     else->Column(Modifier.fillMaxSize()){
                         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp, vertical=5.dp),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically){
@@ -822,9 +823,9 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";9->"پیام‌ها";10->"پروفایل من";11->"اعلان‌ها";12->"گفت‌وگو";13->"گزارش مشکل";14->"بروزرسانی";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";9->"پیام‌ها";10->"پروفایل من";11->"اعلان‌ها";12->"گفت‌وگو";13->"گزارش مشکل";14->"بروزرسانی";15->"کاربران و دوستان";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={
-                            if(screen in 7..14) IconButton({screen=when(screen){7->4;8->0;13->4;14->4;else->9}}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
+                            if(screen in 7..15) IconButton({screen=when(screen){7->4;8->0;13->4;14->4;15->9;else->9}}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
                             else IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}
                         },
                         actions={
@@ -931,21 +932,31 @@ fun PregnancyApp(){
                         onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
                         onProfile={screen=10},
                         onSignIn={signInFirebaseWithGoogle()},
-                        onNotifications={screen=11}
+                        onNotifications={screen=11},
+                        onFriends={screen=15},
+                        contentPadding=pad
                     )
-                    10->NonoProfileScreen(uid=FirebaseAuth.getInstance().currentUser?.uid,onBack={screen=9},onSignIn={signInFirebaseWithGoogle()})
+                    10->NonoProfileScreen(uid=FirebaseAuth.getInstance().currentUser?.uid,onBack={screen=9},onSignIn={signInFirebaseWithGoogle()},contentPadding=pad)
                     11->NonoNotificationsScreen(
                         uid=FirebaseAuth.getInstance().currentUser?.uid,
                         onBack={screen=9},
-                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12}
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        contentPadding=pad
+                    )
+                    15->NonoFriendsScreen(
+                        uid=FirebaseAuth.getInstance().currentUser?.uid,
+                        onBack={screen=9},
+                        onSignIn={signInFirebaseWithGoogle()},
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        contentPadding=pad
                     )
                     12->{
                         val conversation=activeConversation
                         val other=activeOtherProfile
                         val currentUid=FirebaseAuth.getInstance().currentUser?.uid
                         if(conversation!=null && other!=null && currentUid!=null)
-                            NonoChatThreadScreen(currentUid,conversation,other,onBack={screen=9})
-                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11})
+                            NonoChatThreadScreen(currentUid,conversation,other,onBack={screen=9},contentPadding=pad)
+                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11},onFriends={screen=15},contentPadding=pad)
                     }
                 }
             }
