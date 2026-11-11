@@ -66,9 +66,9 @@ fun decodeBabyNameLists(raw:String?):List<BabyNameList> = runCatching {
 fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->Unit,pad:PaddingValues) {
  val context=LocalContext.current
  val bankNames=remember { readBabyNameBank(context) }
-  val filteredNames=remember(bankNames,gender,query){bankNames.filter{it.gender==gender&&(query.isBlank()||it.name.contains(query,true)||it.meaning.contains(query,true)||it.english.contains(query,true))}}
  var moveNameId by remember { mutableStateOf<String?>(null) }
  var tab by remember { mutableIntStateOf(0) };var gender by remember { mutableStateOf("دختر") };var query by remember { mutableStateOf("") }
+  val filteredNames=remember(bankNames,gender,query){bankNames.filter{it.gender==gender&&(query.isBlank()||it.name.contains(query,true)||it.meaning.contains(query,true)||it.english.contains(query,true))}}
  var activeId by remember { mutableStateOf<String?>(null) };var listTitle by remember { mutableStateOf("") };var createDialog by remember { mutableStateOf(false) }
  var customName by remember { mutableStateOf("") };var customGender by remember { mutableStateOf("دختر") };var customDialog by remember { mutableStateOf(false) }
  var noteId by remember { mutableStateOf<String?>(null) };var noteText by remember { mutableStateOf("") };var addName by remember { mutableStateOf<BabyName?>(null) }
