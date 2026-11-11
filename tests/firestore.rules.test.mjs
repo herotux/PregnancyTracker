@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   query,
   whereArrayContains,
+  whereEqualTo,
   writeBatch,
 } from "firebase/firestore";
 import { after, before, beforeEach, test } from "node:test";
@@ -377,8 +378,11 @@ test("users can send friend requests, but unrelated accounts cannot read them", 
   }));
 
   const recipientDb = env.authenticatedContext("friend-recipient").firestore();
-  await assertSucceeds(getDoc(requestRef));
-  await assertSucceeds(getDocs(collection(recipientDb, "friendRequests")));
+  await assertSucceeds(getDoc(doc(recipientDb, "friendRequests/friend-sender_friend-recipient")));
+  await assertSucceeds(getDocs(query(
+    collection(recipientDb, "friendRequests"),
+    whereEqualTo("recipientUid", "friend-recipient")
+  )));
 
   const outsiderDb = env.authenticatedContext("friend-outsider").firestore();
   await assertFails(getDoc(doc(outsiderDb, "friendRequests/friend-sender_friend-recipient")));
