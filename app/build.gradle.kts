@@ -13,9 +13,28 @@ android {
         applicationId = "ir.herotux.pregnancytracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = providers.gradleProperty("appVersionCode").orElse("1").get().toInt()
+        versionName = providers.gradleProperty("appVersionName").orElse("1.0.0").get()
+        buildConfigField("String", "GITHUB_REPOSITORY", "\"herotux/PregnancyTracker\"")
     }
+
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file(System.getenv("RELEASE_KEYSTORE_PATH") ?: "app/release-keystore.jks")
+            storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
+    }
+
+    buildFeatures { buildConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -33,6 +52,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
+    implementation("io.coil-kt:coil-compose:2.7.0")
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.compose.ui:ui")

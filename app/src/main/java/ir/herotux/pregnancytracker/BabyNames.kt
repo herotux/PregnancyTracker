@@ -1,6 +1,9 @@
 package ir.herotux.pregnancytracker
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,7 +22,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-data class BabyName(val id:String,val name:String,val gender:String,val meaning:String="",val origin:String="")
+data class BabyName(val id:String,val name:String,val gender:String,val meaning:String="",val origin:String="",val english:String="",val genderConflict:Boolean=false)
 data class SavedBabyName(val id:String,val name:String,val gender:String,val meaning:String="",val origin:String="",val note:String="",val custom:Boolean=false)
 data class BabyNameList(val id:String,val title:String,val items:List<SavedBabyName>)
 
@@ -38,9 +41,13 @@ private val starterNamesFallback=listOf(
 
 
 private fun readBabyNameBank(context:android.content.Context):List<BabyName> = runCatching {
- val json=JSONObject(context.assets.open("names_bank.json").bufferedReader().use{it.readText()})
- val array=json.getJSONArray("names")
- (0 until array.length()).map { i -> val n=array.getJSONObject(i);BabyName(n.optString("id"),n.optString("name"),n.optString("gender"),n.optString("meaning"),n.optString("origin")) }
+ val all=JSONArray()
+ listOf("names_bank.json","names_bank_2.json","names_bank_3.json").forEach { file ->
+  val json=JSONObject(context.assets.open(file).bufferedReader().use{it.readText()})
+  val array=json.getJSONArray("names")
+  for(i in 0 until array.length())all.put(array.getJSONObject(i))
+ }
+ (0 until all.length()).map { i -> val n=all.getJSONObject(i);BabyName(n.optString("id"),n.optString("name"),n.optString("gender"),n.optString("meaning"),n.optString("origin"),n.optString("english"),n.optBoolean("genderConflict")) }
 }.getOrDefault(starterNamesFallback)
 
 fun encodeBabyNameLists(lists:List<BabyNameList>):String {
@@ -55,51 +62,63 @@ fun decodeBabyNameLists(raw:String?):List<BabyNameList> = runCatching {
  }
 }.getOrDefault(emptyList())
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->Unit,pad:PaddingValues) {
  val context=LocalContext.current
  val bankNames=remember { readBabyNameBank(context) }
  var moveNameId by remember { mutableStateOf<String?>(null) }
  var tab by remember { mutableIntStateOf(0) };var gender by remember { mutableStateOf("دختر") };var query by remember { mutableStateOf("") }
+  val filteredNames=remember(bankNames,gender,query){bankNames.filter{it.gender==gender&&(query.isBlank()||it.name.contains(query,true)||it.meaning.contains(query,true)||it.english.contains(query,true))}}
  var activeId by remember { mutableStateOf<String?>(null) };var listTitle by remember { mutableStateOf("") };var createDialog by remember { mutableStateOf(false) }
  var customName by remember { mutableStateOf("") };var customGender by remember { mutableStateOf("دختر") };var customDialog by remember { mutableStateOf(false) }
  var noteId by remember { mutableStateOf<String?>(null) };var noteText by remember { mutableStateOf("") };var addName by remember { mutableStateOf<BabyName?>(null) }
  var targetList by remember { mutableStateOf("") }
+ var addFeedback by remember { mutableStateOf<String?>(null) }
  val active=savedLists.firstOrNull{it.id==activeId}
  fun update(l:BabyNameList){onSave(savedLists.map{if(it.id==l.id)l else it})}
- fun append(listId:String,n:BabyName,custom:Boolean=false){val l=savedLists.firstOrNull{it.id==listId}?:return;if(l.items.any{it.name.equals(n.name,true)})return;update(l.copy(items=l.items+SavedBabyName(UUID.randomUUID().toString(),n.name,n.gender,n.meaning,n.origin,custom=custom)))}
- Column(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp)) {
-  Text("بانک اسامی",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=8.dp))
-  Text("اسم‌ها را پیدا کن، در فهرست‌های دلخواهت نگه دار و برایشان یادداشت بنویس.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp,bottom=10.dp))
-  ScrollableTabRow(selectedTabIndex=tab,edgePadding=0.dp){Tab(selected=tab==0,onClick={tab=0;activeId=null},text={Text("بانک نام‌ها",fontFamily=Fa)});Tab(selected=tab==1,onClick={tab=1;activeId=null},text={Text("فهرست‌های من",fontFamily=Fa)})}
+ fun append(listId:String,n:BabyName,custom:Boolean=false):Boolean {
+  val list=savedLists.firstOrNull{it.id==listId}
+  if(list==null){addFeedback="فهرست انتخاب‌شده پیدا نشد؛ دوباره فهرست مقصد را انتخاب کن.";return false}
+  if(list.items.any{it.name.trim().equals(n.name.trim(),true)}){
+   addFeedback="«${n.name}» از قبل در فهرست «${list.title}» وجود دارد."
+   return false
+  }
+  val updated=savedLists.map{if(it.id==listId)it.copy(items=it.items+SavedBabyName(UUID.randomUUID().toString(),n.name,n.gender,n.meaning,n.origin,custom=custom))else it}
+  onSave(updated)
+  addFeedback="«${n.name}» به فهرست «${list.title}» اضافه شد."
+  return true
+ }
+ LazyColumn(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+  item { Text("بانک اسامی",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=8.dp)) }
+  item { Text("اسم‌ها را پیدا کن، در فهرست‌های دلخواهت نگه دار و برایشان یادداشت بنویس.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp,bottom=10.dp)) }
+  item { Text(fa(bankNames.size)+" اسم • دختر: "+fa(bankNames.count{it.gender=="دختر"})+" • پسر: "+fa(bankNames.count{it.gender=="پسر"})+" • مشترک: "+fa(bankNames.count{it.gender=="مشترک"})+" • نامشخص: "+fa(bankNames.count{it.gender=="نامشخص"}),fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.padding(bottom=8.dp)) }
+  stickyHeader { Surface(color=MaterialTheme.colorScheme.background,shadowElevation=2.dp) { ScrollableTabRow(selectedTabIndex=tab,edgePadding=0.dp){Tab(selected=tab==0,onClick={tab=0;activeId=null},text={Text("بانک نام‌ها",fontFamily=Fa)});Tab(selected=tab==1,onClick={tab=1;activeId=null},text={Text("فهرست‌های من",fontFamily=Fa)})} } }
   if(tab==0){
-   Row(Modifier.fillMaxWidth().padding(top=10.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(gender=="دختر",{gender="دختر"},{Text("دخترانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Favorite,null)});FilterChip(gender=="پسر",{gender="پسر"},{Text("پسرانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Person,null)})}
-   OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().padding(top=7.dp),label={Text("جست‌وجوی اسم",fontFamily=Fa)},singleLine=true,shape=RoundedCornerShape(14.dp))
-   if(savedLists.isNotEmpty()){
+   item { Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top=10.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(gender=="دختر",{gender="دختر"},{Text("دخترانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Favorite,null)});FilterChip(gender=="پسر",{gender="پسر"},{Text("پسرانه",fontFamily=Fa)},leadingIcon={Icon(Icons.Default.Person,null)});FilterChip(gender=="مشترک",{gender="مشترک"},{Text("مشترک",fontFamily=Fa)});FilterChip(gender=="نامشخص",{gender="نامشخص"},{Text("نامشخص",fontFamily=Fa)})} }
+   item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().padding(top=7.dp),label={Text("جست‌وجوی اسم",fontFamily=Fa)},singleLine=true,shape=RoundedCornerShape(14.dp)) }
+   item { if(savedLists.isNotEmpty()){
     var expanded by remember{mutableStateOf(false)}
     ExposedDropdownMenuBox(expanded,{expanded=it},Modifier.fillMaxWidth().padding(top=6.dp)){
      OutlinedTextField(value=savedLists.firstOrNull{it.id==targetList}?.title?:"انتخاب فهرست مقصد",onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("افزودن اسم به فهرست",fontFamily=Fa)},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
      ExposedDropdownMenu(expanded,{expanded=false}){savedLists.forEach{l->DropdownMenuItem(text={Text(l.title,fontFamily=Fa)},onClick={targetList=l.id;expanded=false})}}
     }
-   }else Text("برای ذخیره اسم‌ها، ابتدا در «فهرست‌های من» یک فهرست بساز.",fontFamily=Fa,fontSize=12.sp,color=RoseDark,modifier=Modifier.padding(10.dp))
-   LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
-    items(bankNames.filter{it.gender==gender&&(query.isBlank()||it.name.contains(query,true)||it.meaning.contains(query,true))},key={it.id}){n->
+   }else Text("برای ذخیره اسم‌ها، ابتدا در «فهرست‌های من» یک فهرست بساز.",fontFamily=Fa,fontSize=12.sp,color=RoseDark,modifier=Modifier.padding(10.dp)) }
+   addFeedback?.let { message -> item { Text(message,fontFamily=Fa,fontSize=12.sp,color=if(message.startsWith("«")&&message.contains("اضافه شد"))RoseDark else MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.fillMaxWidth().padding(vertical=3.dp)) } }
+   items(filteredNames,key={it.id}){n->
      Card(shape=RoundedCornerShape(16.dp)){Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically){
-      Column(Modifier.weight(1f)){Text(n.name,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp);if(n.meaning.isNotBlank())Text(n.meaning+" • "+n.origin,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) else Text("معنی و ریشه هنوز بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+      Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)){Text(n.name,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp);if(n.english.isNotBlank())Text(n.english,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);when{n.meaning.isNotBlank()&&n.origin.isNotBlank()->Text(n.meaning+" • "+n.origin,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.meaning.isNotBlank()->Text(n.meaning,fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);n.origin.isNotBlank()->Text("ریشه: "+n.origin+" • معنی بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);else->Text("معنی هنوز بررسی نشده",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)};if(n.genderConflict)Text("درباره جنسیت این نام در منابع اختلاف وجود دارد",fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.error)}
       IconButton(onClick={if(targetList.isNotBlank())append(targetList,n)else addName=n},enabled=savedLists.isNotEmpty()){Icon(Icons.Default.Add,"افزودن به فهرست",tint=RoseDark)}
      }}
     }
-   }
   }else if(active==null){
-   Row(Modifier.fillMaxWidth().padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically){Text("فهرست‌های شخصی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,modifier=Modifier.weight(1f));Button(onClick={createDialog=true},shape=RoundedCornerShape(14.dp)){Icon(Icons.Default.Add,null);Text("فهرست جدید",fontFamily=Fa)}}
-   if(savedLists.isEmpty())Column(Modifier.fillMaxWidth().padding(top=30.dp),horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.Bookmark,null,tint=RoseDark,modifier=Modifier.size(40.dp));Text("هنوز فهرستی نساخته‌ای",fontFamily=Fa,fontWeight=FontWeight.Bold);Text("مثل «اسم‌های محبوب» یا «انتخاب نهایی».",fontFamily=Fa,fontSize=12.sp)}
-   else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(savedLists,key={it.id}){l->Card(Modifier.fillMaxWidth().clickable{activeId=l.id},shape=RoundedCornerShape(17.dp)){Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Bookmark,null,tint=RoseDark);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text(l.title,fontFamily=Fa,fontWeight=FontWeight.Bold);Text(fa(l.items.size)+" اسم",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)};Icon(Icons.Default.ChevronLeft,null)}}}}
+   item { Row(Modifier.fillMaxWidth().padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically){Text("فهرست‌های شخصی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,modifier=Modifier.weight(1f));Button(onClick={createDialog=true},shape=RoundedCornerShape(14.dp)){Icon(Icons.Default.Add,null);Text("فهرست جدید",fontFamily=Fa)}} }
+   if(savedLists.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(top=30.dp),horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.Bookmark,null,tint=RoseDark,modifier=Modifier.size(40.dp));Text("هنوز فهرستی نساخته‌ای",fontFamily=Fa,fontWeight=FontWeight.Bold);Text("مثل «اسم‌های محبوب» یا «انتخاب نهایی».",fontFamily=Fa,fontSize=12.sp)} }
+   else items(savedLists,key={it.id}){l->Card(Modifier.fillMaxWidth().clickable{activeId=l.id},shape=RoundedCornerShape(17.dp)){Row(Modifier.fillMaxWidth().padding(15.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Bookmark,null,tint=RoseDark);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text(l.title,fontFamily=Fa,fontWeight=FontWeight.Bold);Text(fa(l.items.size)+" اسم",fontFamily=Fa,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)};Icon(Icons.Default.ChevronLeft,null)}}}
   }else{
-   Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={activeId=null}){Icon(Icons.Default.ArrowBack,"بازگشت")};Column(Modifier.weight(1f)){Text(active.title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp);Text(fa(active.items.size)+" اسم",fontFamily=Fa,fontSize=11.sp)};IconButton(onClick={customDialog=true}){Icon(Icons.Default.Add,"افزودن اسم دلخواه")}}
-   if(active.items.isEmpty())Text("این فهرست خالی است؛ از بانک اسم انتخاب کن یا اسم دلخواهت را اضافه کن.",fontFamily=Fa,fontSize=13.sp,modifier=Modifier.padding(top=14.dp))
-   LazyColumn(verticalArrangement=Arrangement.spacedBy(7.dp),contentPadding=PaddingValues(bottom=16.dp)){
-    items(active.items,key={it.id}){n->Card(shape=RoundedCornerShape(15.dp)){Column(Modifier.fillMaxWidth().padding(10.dp)){
+   item { Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={activeId=null}){Icon(Icons.Default.ArrowBack,"بازگشت")};Column(Modifier.weight(1f)){Text(active.title,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp);Text(fa(active.items.size)+" اسم",fontFamily=Fa,fontSize=11.sp)};IconButton(onClick={customDialog=true}){Icon(Icons.Default.Add,"افزودن اسم دلخواه")}} }
+   if(active.items.isEmpty()) item { Text("این فهرست خالی است؛ از بانک اسم انتخاب کن یا اسم دلخواهت را اضافه کن.",fontFamily=Fa,fontSize=13.sp,modifier=Modifier.padding(top=14.dp)) }
+   items(active.items,key={it.id}){n->Card(shape=RoundedCornerShape(15.dp)){Column(Modifier.fillMaxWidth().padding(10.dp)){
      Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(n.name,fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=16.sp);Text(n.gender+(if(n.custom)" • شخصی" else ""),fontFamily=Fa,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
       val index=active.items.indexOfFirst{it.id==n.id}
       IconButton(enabled=index>0,onClick={val x=active.items.toMutableList();val v=x.removeAt(index);x.add(index-1,v);update(active.copy(items=x))}){Icon(Icons.Default.ArrowUpward,"بالا")}
@@ -113,10 +132,9 @@ fun BabyNamesScreen(savedLists:List<BabyNameList>,onSave:(List<BabyNameList>)->U
     }}}
    }
   }
- }
  if(createDialog)AlertDialog(onDismissRequest={createDialog=false},title={Text("ساخت فهرست",fontFamily=Fa)},text={OutlinedTextField(listTitle,{listTitle=it},label={Text("نام فهرست",fontFamily=Fa)},singleLine=true)},confirmButton={TextButton(onClick={if(listTitle.isNotBlank()){onSave(savedLists+BabyNameList(UUID.randomUUID().toString(),listTitle.trim(),emptyList()));listTitle="";createDialog=false}}){Text("ساختن",fontFamily=Fa)}},dismissButton={TextButton(onClick={createDialog=false}){Text("انصراف",fontFamily=Fa)}})
- if(customDialog&&active!=null)AlertDialog(onDismissRequest={customDialog=false},title={Text("افزودن اسم دلخواه",fontFamily=Fa)},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(customName,{customName=it},label={Text("نام",fontFamily=Fa)},singleLine=true);Row{FilterChip(customGender=="دختر",{customGender="دختر"},{Text("دختر",fontFamily=Fa)});Spacer(Modifier.width(8.dp));FilterChip(customGender=="پسر",{customGender="پسر"},{Text("پسر",fontFamily=Fa)})}}},confirmButton={TextButton(onClick={if(customName.isNotBlank()){append(active.id,BabyName(UUID.randomUUID().toString(),customName.trim(),customGender),true);customName="";customDialog=false}}){Text("افزودن",fontFamily=Fa)}},dismissButton={TextButton(onClick={customDialog=false}){Text("انصراف",fontFamily=Fa)}})
- if(addName!=null)AlertDialog(onDismissRequest={addName=null},title={Text("انتخاب فهرست",fontFamily=Fa)},text={Column{Text("اسم «${addName!!.name}» به کدام فهرست اضافه شود؟",fontFamily=Fa);savedLists.forEach{l->TextButton(onClick={append(l.id,addName!!);addName=null}){Text(l.title,fontFamily=Fa)}}}},confirmButton={TextButton(onClick={addName=null}){Text("بستن",fontFamily=Fa)}})
+ if(customDialog&&active!=null)AlertDialog(onDismissRequest={customDialog=false},title={Text("افزودن اسم دلخواه",fontFamily=Fa)},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(customName,{customName=it},label={Text("نام",fontFamily=Fa)},singleLine=true);Row{FilterChip(customGender=="دختر",{customGender="دختر"},{Text("دختر",fontFamily=Fa)});Spacer(Modifier.width(8.dp));FilterChip(customGender=="پسر",{customGender="پسر"},{Text("پسر",fontFamily=Fa)})}}},confirmButton={TextButton(onClick={if(customName.isNotBlank()&&append(active.id,BabyName(UUID.randomUUID().toString(),customName.trim(),customGender),true)){customName="";customDialog=false}}){Text("افزودن",fontFamily=Fa)}},dismissButton={TextButton(onClick={customDialog=false}){Text("انصراف",fontFamily=Fa)}})
+ if(addName!=null)AlertDialog(onDismissRequest={addName=null},title={Text("انتخاب فهرست",fontFamily=Fa)},text={Column{Text("اسم «${addName!!.name}» به کدام فهرست اضافه شود؟",fontFamily=Fa);savedLists.forEach{l->TextButton(onClick={if(append(l.id,addName!!))addName=null}){Text(l.title,fontFamily=Fa)}}}},confirmButton={TextButton(onClick={addName=null}){Text("بستن",fontFamily=Fa)}})
  if(moveNameId!=null&&active!=null)AlertDialog(onDismissRequest={moveNameId=null},title={Text("انتقال اسم به فهرست دیگر",fontFamily=Fa)},text={Column{Text("اسم انتخاب‌شده از این فهرست برداشته و به مقصد منتقل می‌شود.",fontFamily=Fa,fontSize=12.sp);savedLists.filter{it.id!=active.id}.forEach{dest->TextButton(onClick={val n=active.items.firstOrNull{it.id==moveNameId};if(n!=null){val exists=dest.items.any{it.name.equals(n.name,true)};onSave(savedLists.map{list->when(list.id){dest.id->if(exists)list else list.copy(items=list.items+n);active.id->list.copy(items=list.items.filterNot{it.id==moveNameId});else->list}})};moveNameId=null}){Text(dest.title,fontFamily=Fa)}}}},confirmButton={TextButton(onClick={moveNameId=null}){Text("انصراف",fontFamily=Fa)}})
  if(noteId!=null)AlertDialog(onDismissRequest={noteId=null},title={Text("یادداشت اسم",fontFamily=Fa)},text={OutlinedTextField(noteText,{noteText=it},label={Text("یادداشت شخصی",fontFamily=Fa)},minLines=3)},confirmButton={TextButton(onClick={val l=savedLists.firstOrNull{it.id==activeId};if(l!=null)update(l.copy(items=l.items.map{if(it.id==noteId)it.copy(note=noteText)else it}));noteId=null}){Text("ذخیره",fontFamily=Fa)}},dismissButton={TextButton(onClick={noteId=null}){Text("انصراف",fontFamily=Fa)}})
 }

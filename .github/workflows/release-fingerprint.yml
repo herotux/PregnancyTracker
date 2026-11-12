@@ -1,0 +1,37 @@
+name: Android Release Certificate Fingerprint
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fingerprint:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_KEYSTORE_PATH: app/release-keystore.jks
+      RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore release keystore and print Firebase fingerprints
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Missing ANDROID_RELEASE_KEYSTORE_BASE64"; exit 1; }
+          test -n "$RELEASE_STORE_PASSWORD" || { echo "::error::Missing ANDROID_RELEASE_STORE_PASSWORD"; exit 1; }
+          test -n "$RELEASE_KEY_ALIAS" || { echo "::error::Missing ANDROID_RELEASE_KEY_ALIAS"; exit 1; }
+          mkdir -p app
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RELEASE_KEYSTORE_PATH"
+          keytool -list -v -keystore "$RELEASE_KEYSTORE_PATH" -storepass "$RELEASE_STORE_PASSWORD" -alias "$RELEASE_KEY_ALIAS" > fingerprint.txt
+          SHA1="$(awk '/SHA1:/{print $2; exit}' fingerprint.txt)"
+          SHA256="$(awk '/SHA256:/{print $2; exit}' fingerprint.txt)"
+          {
+            echo "## Add these fingerprints to Firebase Android app"
+            echo "- Package: ir.herotux.pregnancytracker"
+            echo "- SHA-1: $SHA1"
+            echo "- SHA-256: $SHA256"
+          } >> "$GITHUB_STEP_SUMMARY"

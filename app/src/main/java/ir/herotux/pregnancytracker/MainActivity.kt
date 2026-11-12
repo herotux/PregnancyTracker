@@ -57,6 +57,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import kotlin.math.roundToInt
@@ -75,8 +76,19 @@ val Fa = FontFamily(
     Font(R.font.vazirmatn_extrabold, FontWeight.ExtraBold),
     Font(R.font.vazirmatn_black, FontWeight.Black)
 )
-private val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
+internal val Context.pregnancyStore by preferencesDataStore(name = "pregnancy_settings")
 private val DueKey = stringPreferencesKey("due_date")
+private val JourneyStageKey = stringPreferencesKey("reproductive_stage")
+private val DatingMethodKey = stringPreferencesKey("pregnancy_dating_method")
+private val DatingPendingKey = booleanPreferencesKey("pregnancy_dating_pending")
+private val LastPeriodKey = stringPreferencesKey("cycle_last_period")
+private val CycleLengthKey = stringPreferencesKey("cycle_length")
+private val CycleLogsKey = stringPreferencesKey("cycle_day_logs")
+private val PreconceptionChecklistKey = stringPreferencesKey("preconception_checklist")
+private val DatingReferenceDateKey = stringPreferencesKey("pregnancy_dating_reference_date")
+private val DatingWeeksKey = stringPreferencesKey("pregnancy_dating_weeks")
+private val DatingDaysKey = stringPreferencesKey("pregnancy_dating_days")
+private val DatingEmbryoAgeKey = stringPreferencesKey("pregnancy_dating_embryo_age")
 private val ThemeKey = stringPreferencesKey("theme_mode")
 private val ReminderKey = booleanPreferencesKey("weekly_reminder_enabled")
 private val UserRoleKey = stringPreferencesKey("user_role")
@@ -265,7 +277,23 @@ fun PregnancyApp(){
     var due by remember{mutableStateOf(LocalDate.now())}
     var loaded by remember{mutableStateOf(false)}
     var hasProfile by remember{mutableStateOf(false)}
+    var hasPregnancyDating by remember{mutableStateOf(false)}
+    var datingPending by remember{mutableStateOf(false)}
+    var journeyStage by remember{mutableStateOf(STAGE_PLANNING)}
+    var datingMethod by remember{mutableStateOf(DATING_LMP)}
+    var journeyDate by remember{mutableStateOf(LocalDate.now())}
+    var journeyDateSelected by remember{mutableStateOf(false)}
+    var gestationalWeeks by remember{mutableStateOf("8")}
+    var gestationalDays by remember{mutableStateOf("0")}
+    var cycleLength by remember{mutableIntStateOf(28)}
+    var lastPeriod by remember{mutableStateOf<LocalDate?>(null)}
+    var cycleLogs by remember{mutableStateOf(emptyList<CycleDayLog>())}
+    var preconceptionDone by remember{mutableStateOf(emptySet<Int>())}
+    var embryoAgeDays by remember{mutableIntStateOf(5)}
+    var datePickerTarget by remember{mutableStateOf("due")}
     var screen by remember{mutableIntStateOf(0)}
+    var activeConversation by remember{mutableStateOf<NonoConversation?>(null)}
+    var activeOtherProfile by remember{mutableStateOf<NonoPublicProfile?>(null)}
     var calendarMonth by remember{mutableStateOf(LocalDate.now().withDayOfMonth(1))}
     var selectedDate by remember{mutableStateOf(LocalDate.now())}
     var note by remember{mutableStateOf("")}
@@ -303,8 +331,24 @@ fun PregnancyApp(){
     var medicationEditorOpen by remember{mutableStateOf(false)}
 
     LaunchedEffect(Unit){
-        val saved=context.pregnancyStore.data.first()[DueKey]
-        if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true}
+        NonoUpdateService.schedule(context)
+        val prefs=context.pregnancyStore.data.first()
+        val saved=prefs[DueKey]
+        if(saved!=null) runCatching{due=LocalDate.parse(saved); hasProfile=true; hasPregnancyDating=true}
+        if(prefs[JourneyStageKey]!=null) hasProfile=true
+        journeyStage=prefs[JourneyStageKey] ?: if(saved!=null) STAGE_PREGNANT else STAGE_PLANNING
+        hasPregnancyDating=saved!=null && ! (prefs[DatingPendingKey] ?: false) && journeyStage in listOf(STAGE_POSITIVE, STAGE_PREGNANT)
+        datingMethod=prefs[DatingMethodKey] ?: DATING_LMP
+        journeyDate=prefs[DatingReferenceDateKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()} ?: LocalDate.now()
+        journeyDateSelected=prefs[DatingReferenceDateKey]!=null
+        gestationalWeeks=prefs[DatingWeeksKey] ?: "8"
+        gestationalDays=prefs[DatingDaysKey] ?: "0"
+        embryoAgeDays=(prefs[DatingEmbryoAgeKey]?.toIntOrNull() ?: 5).coerceIn(3,6)
+        datingPending=prefs[DatingPendingKey] ?: false
+        cycleLength=(prefs[CycleLengthKey]?.toIntOrNull() ?: 28).coerceIn(21,45)
+        lastPeriod=prefs[LastPeriodKey]?.let{runCatching{LocalDate.parse(it)}.getOrNull()}
+        cycleLogs=decodeCycleLogs(prefs[CycleLogsKey])
+        preconceptionDone=decodeChecklist(prefs[PreconceptionChecklistKey])
         val snapshot=DriveSync.readLocalSnapshot(context)
         if(snapshot.first.isNotEmpty()) notes=snapshot.first
         localUpdatedAt=snapshot.second
@@ -317,11 +361,12 @@ fun PregnancyApp(){
         if(reminderEnabled) scheduleWeeklyReminder(context)
         driveEmail=DriveSync.connectedEmail(context)
         if(driveEmail!=null) syncStatus="اتصال به Google Drive فعال است"
+        FirebaseAuth.getInstance().currentUser?.let { signedInUser -> runCatching { NonoMessaging.ensureProfile(signedInUser) } }
         val profilePrefs=context.pregnancyStore.data.first()
         userRole=profilePrefs[UserRoleKey]
         familyId=profilePrefs[FamilyIdKey]
         familyInviteCode=profilePrefs[FamilyInviteCodeKey]
-        onboardingStage=if(userRole==null) "welcome" else if(saved==null) "family" else "done"
+        onboardingStage=if(userRole==null) "welcome" else if(saved==null && prefs[JourneyStageKey]==null) "journey" else "done"
         loaded=true
     }
 
@@ -391,13 +436,44 @@ fun PregnancyApp(){
     }
 
     suspend fun requestGoogleCredential(): androidx.credentials.Credential {
+        val serverClientId = context.getString(R.string.default_web_client_id)
+
+        // First show the Credential Manager account picker, including accounts
+        // that have not previously authorized this app.
         val googleIdOption = GetGoogleIdOption.Builder()
-            .setServerClientId(context.getString(R.string.default_web_client_id))
+            .setServerClientId(serverClientId)
             .setFilterByAuthorizedAccounts(false)
             .setAutoSelectEnabled(false)
             .build()
-        val request = GetCredentialRequest.Builder().addCredentialOption(googleIdOption).build()
-        return credentialManager.getCredential(context = activity, request = request).credential
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+
+        return try {
+            credentialManager.getCredential(context = activity, request = request).credential
+        } catch (error: Exception) {
+            val detail = error.localizedMessage ?: error.message.orEmpty()
+
+            if (detail.contains("Account reauth failed", ignoreCase = true) || detail.contains("[16]")) {
+                // Google Play services can retain a stale credential-provider session.
+                // Clear that state and retry once before surfacing the authentication error.
+                runCatching {
+                    credentialManager.clearCredentialState(ClearCredentialStateRequest())
+                }
+                credentialManager.getCredential(context = activity, request = request).credential
+            } else if (error is NoCredentialException) {
+                // Some devices/accounts suppress the Credential Manager bottom sheet
+                // (for example, when Google sign-in prompts are disabled). Fall back
+                // to the explicit Sign in with Google button flow.
+                val signInOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
+                val signInRequest = GetCredentialRequest.Builder()
+                    .addCredentialOption(signInOption)
+                    .build()
+                credentialManager.getCredential(context = activity, request = signInRequest).credential
+            } else {
+                throw error
+            }
+        }
     }
 
     fun signInFirebaseWithGoogle(onSignedIn: () -> Unit = {}) {
@@ -413,6 +489,7 @@ fun PregnancyApp(){
                     FirebaseAuth.getInstance().signInWithCredential(firebaseCredential)
                         .addOnSuccessListener { authResult ->
                             firebaseEmail = authResult.user?.email
+                            authResult.user?.let { signedInUser -> scope.launch { runCatching { NonoMessaging.ensureProfile(signedInUser) } } }
                             authBusy = false
                             authError = null
                             syncStatus = "ورود با Google انجام شد: " + (firebaseEmail ?: "حساب متصل")
@@ -432,7 +509,7 @@ fun PregnancyApp(){
                 authBusy = false
                 val detail = error.localizedMessage ?: error.message ?: error.javaClass.simpleName
                 authError = when {
-                    error is NoCredentialException -> "حساب Google روی دستگاه پیدا نشد. ابتدا یک حساب Google به گوشی اضافه کن."
+                    error is NoCredentialException -> "سرویس ورود Google هیچ حسابی برنگرداند. Google Play services و تنظیمات ورود با Google را بررسی کن و دوباره تلاش کن."
                     detail.contains("cancel", ignoreCase = true) -> "ورود Google لغو شد."
                     else -> "ورود Google ناموفق بود: $detail"
                 }
@@ -545,9 +622,59 @@ fun PregnancyApp(){
                                 userRole=role
                                 scope.launch{context.pregnancyStore.edit{it[UserRoleKey]=role}}
                                 onboardingError=null
-                                onboardingStage=if(hasProfile) "done" else "family"
+                                onboardingStage=if(hasProfile) "done" else "journey"
                             },
                             onBack={onboardingStage="welcome"})
+                        "journey" -> ReproductiveJourneyScreen(
+                            stage=journeyStage, datingMethod=datingMethod, referenceDate=journeyDate,
+                            dateSelected=journeyDateSelected,
+                            gestationalWeeks=gestationalWeeks, gestationalDays=gestationalDays,
+                            cycleLength=cycleLength.toString(), embryoAgeDays=embryoAgeDays,
+                            onStage={journeyStage=it}, onMethod={datingMethod=it;journeyDateSelected=false},
+                            onPickDate={datePickerTarget="journey";dateDialog=true},
+                            onWeeks={gestationalWeeks=it}, onDays={gestationalDays=it},
+                            onCycleLength={cycleLength=it.toIntOrNull()?.coerceIn(21,45) ?: 28},
+                            onEmbryoAge={embryoAgeDays=it},
+                            onContinueCycle={
+                                datingPending=false; hasProfile=true; hasPregnancyDating=false
+                                scope.launch{context.pregnancyStore.edit{
+                                    it.recordStageTransition(journeyStage)
+                                     it[JourneyStageKey]=journeyStage
+                                    it[CycleLengthKey]=cycleLength.toString()
+                                    it[DatingPendingKey]=false
+                                }}
+                                onboardingStage="done"
+                            },
+                            onContinuePregnancy={
+                                val effectiveMethod=if(journeyStage==STAGE_POSSIBLE) DATING_UNKNOWN else datingMethod
+                                val estimated=estimatePregnancyDueDate(
+                                    effectiveMethod,journeyDate,cycleLength,
+                                    gestationalWeeks.toIntOrNull() ?: 0,
+                                    gestationalDays.toIntOrNull() ?: 0,embryoAgeDays
+                                )
+                                datingMethod=effectiveMethod
+                                datingPending=estimated==null; hasProfile=true; hasPregnancyDating=estimated!=null
+                                if(estimated!=null) due=estimated
+                                scope.launch{context.pregnancyStore.edit{
+                                    it.recordStageTransition(journeyStage)
+                                     it[JourneyStageKey]=journeyStage
+                                    it[DatingMethodKey]=effectiveMethod
+                                    if(journeyDateSelected) it[DatingReferenceDateKey]=journeyDate.toString() else it.remove(DatingReferenceDateKey)
+                                    it[DatingWeeksKey]=gestationalWeeks
+                                    it[DatingDaysKey]=gestationalDays
+                                    it[DatingEmbryoAgeKey]=embryoAgeDays.toString()
+                                    it[DatingPendingKey]=datingPending
+                                    if(estimated!=null) it[DueKey]=estimated.toString()
+                                    it[CycleLengthKey]=cycleLength.toString()
+                                }
+                                if(estimated!=null){
+                                    due=estimated
+                                    DriveSync.saveLocalSnapshot(context,estimated,notes,System.currentTimeMillis())
+                                }}
+                                onboardingStage="done"
+                            },
+                            onBack={onboardingStage="role"}
+                        )
                         else -> NonoFamilySetupScreen(
                             role=userRole ?: "mother",email=firebaseEmail,inviteCode=inviteCodeInput,
                             busy=onboardingBusy || authBusy,error=onboardingError ?: authError,
@@ -584,32 +711,91 @@ fun PregnancyApp(){
                 }
             }
         }
-        if(dateDialog) DateDialogModern(due,{newDue->
-            dateDialog=false
-            due=newDue
-            val user=FirebaseAuth.getInstance().currentUser
-            scope.launch{
-                onboardingBusy=true
-                onboardingError=null
-                if(user!=null){
-                    runCatching{FamilyCloud.create(user.uid,userRole ?: "mother",newDue)}
-                        .onSuccess{profile->
-                            familyId=profile.familyId
-                            familyInviteCode=profile.inviteCode
-                            context.pregnancyStore.edit{
-                                it[FamilyIdKey]=profile.familyId
-                                it[FamilyInviteCodeKey]=profile.inviteCode
-                            }
-                            syncStatus="پرونده مشترک ساخته شد؛ کد دعوت: " + profile.inviteCode
-                        }
-                        .onFailure{syncStatus="پرونده روی گوشی ذخیره شد، اما ساخت پرونده ابری ناموفق بود: "+(it.message ?: "خطای ناشناخته")}
+        if(dateDialog) DateDialogModern(
+            if(datePickerTarget=="due") due else journeyDate,
+            {newDate->
+                dateDialog=false
+                when(datePickerTarget){
+                    "journey" -> {journeyDate=newDate;journeyDateSelected=true}
+                    "period" -> {
+                        lastPeriod=newDate
+                        scope.launch{context.pregnancyStore.edit{it[LastPeriodKey]=newDate.toString()}}
+                    }
+                    else -> { due=newDate; hasPregnancyDating=true; saveLocal() }
                 }
-                hasProfile=true
-                context.pregnancyStore.edit{it[DueKey]=newDue.toString()}
-                DriveSync.saveLocalSnapshot(context,newDue,notes,System.currentTimeMillis())
-                onboardingStage="done"
-                onboardingBusy=false
+            },
+            {dateDialog=false}
+        )
+        return
+    }
+
+    if(datingPending){
+        DatingPendingScreen(onComplete={journeyStage=STAGE_POSITIVE;datingMethod=DATING_ULTRASOUND;onboardingStage="journey"},onChangeStage={onboardingStage="journey"})
+        return
+    }
+    if(!hasPregnancyDating){
+        val currentUid=FirebaseAuth.getInstance().currentUser?.uid
+        MaterialTheme(colorScheme=lightColorScheme(primary=RoseDark,primaryContainer=Blush)){
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl){
+                when(screen){
+                    9->MessagingCenterScreen(
+                        uid=currentUid,
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11},onFriends={screen=15}
+                    )
+                    10->NonoProfileScreen(uid=currentUid,onBack={screen=0},onSignIn={signInFirebaseWithGoogle()})
+                    15->NonoFriendsScreen(uid=currentUid,onBack={screen=9},onSignIn={signInFirebaseWithGoogle()},onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12})
+                    11->NonoNotificationsScreen(
+                        uid=currentUid,onBack={screen=9},
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12}
+                    )
+                    13->IssueReportScreen(uid=currentUid,onBack={screen=0},onSignIn={signInFirebaseWithGoogle()})
+                    14->UpdateCenterScreen(onBack={screen=0})
+                    12->{
+                        val conversation=activeConversation
+                        val other=activeOtherProfile
+                        if(conversation!=null && other!=null && currentUid!=null)
+                            NonoChatThreadScreen(currentUid,conversation,other,onBack={screen=9})
+                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11},onFriends={screen=15})
+                    }
+                    else->Column(Modifier.fillMaxSize()){
+                        Row(Modifier.fillMaxWidth().padding(horizontal=12.dp, vertical=5.dp),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically){
+                            IconButton(onClick={screen=9}){Icon(Icons.Default.MailOutline,contentDescription="پیام‌ها")}
+                            IconButton(onClick={screen=11}){Icon(Icons.Default.NotificationsNone,contentDescription="اعلان‌ها")}
+                            IconButton(onClick={screen=10}){Icon(Icons.Default.AccountCircle,contentDescription="پروفایل")}
+                            IconButton(onClick={screen=13}){Icon(Icons.Default.BugReport,contentDescription="گزارش مشکل")}
+                            IconButton(onClick={screen=14}){Icon(Icons.Default.SystemUpdate,contentDescription="بروزرسانی")}
+                        }
+                        Box(Modifier.weight(1f)){
+                            CycleModeScreen(
+                                stage=journeyStage,lastPeriod=lastPeriod,cycleLength=cycleLength,
+                                onPickPeriodDate={datePickerTarget="period";dateDialog=true},
+                                onCycleLength={value->cycleLength=value;scope.launch{context.pregnancyStore.edit{it[CycleLengthKey]=value.toString()}}},
+                                onSwitchToPregnancy={journeyStage=STAGE_POSITIVE;datingMethod=DATING_LMP;onboardingStage="journey"},
+                                onEditStage={onboardingStage="journey"},
+                                cycleLogs=cycleLogs,
+                                onSaveCycleLog={entry->
+                                    cycleLogs=(cycleLogs.filterNot{it.date==entry.date}+entry).sortedByDescending{it.date}.take(365)
+                                    scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
+                                },
+                                onDeleteCycleLog={date->
+                                    cycleLogs=cycleLogs.filterNot{it.date==date}
+                                    scope.launch{context.pregnancyStore.edit{it[CycleLogsKey]=encodeCycleLogs(cycleLogs)}}
+                                },
+                                preconceptionDone=preconceptionDone,
+                                onPreconceptionToggle={index,checked->
+                                    preconceptionDone=if(checked) preconceptionDone+index else preconceptionDone-index
+                                    scope.launch{context.pregnancyStore.edit{it[PreconceptionChecklistKey]=encodeChecklist(preconceptionDone)}}
+                                }
+                            )
+                        }
+                    }
+                }
             }
+        }
+        if(dateDialog) DateDialogModern(LocalDate.now(),{newDate->
+            dateDialog=false;lastPeriod=newDate
+            scope.launch{context.pregnancyStore.edit{it[LastPeriodKey]=newDate.toString()}}
         },{dateDialog=false})
         return
     }
@@ -637,20 +823,26 @@ fun PregnancyApp(){
                 containerColor=MaterialTheme.colorScheme.background,
                 topBar={
                     CenterAlignedTopAppBar(
-                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
+                        title={Text(when(screen){0->"خانه";1->"هفته جاری";2->"یادداشت‌ها";3->"تقویم";4->"تنظیمات";5->"آزمایش‌ها و سونوگرافی‌ها";6->"همه هفته‌ها";7->"درباره نونو";8->"بانک اسامی";9->"پیام‌ها";10->"پروفایل من";11->"اعلان‌ها";12->"گفت‌وگو";13->"گزارش مشکل";14->"بروزرسانی";15->"کاربران و دوستان";else->"نونو"},fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=19.sp)},
                         navigationIcon={
-                            if(screen==7 || screen==8) IconButton({screen=if(screen==8) 0 else 4}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
+                            if(screen in 7..15) IconButton({screen=when(screen){7->4;8->0;13->4;14->4;15->9;else->9}}) { Icon(Icons.Default.ArrowForward,"بازگشت") }
                             else IconButton({dateDialog=true}){Icon(Icons.Default.Event,null,tint=MaterialTheme.colorScheme.primary)}
                         },
-                        actions={IconButton({screen=4}){Icon(Icons.Default.Settings,null)}},
+                        actions={
+                            Row {
+                                IconButton({screen=11}) { Icon(Icons.Default.NotificationsNone,contentDescription="اعلان‌ها") }
+                                IconButton({screen=10}) { Icon(Icons.Default.AccountCircle,contentDescription="پروفایل") }
+                                IconButton({screen=4}) { Icon(Icons.Default.Settings,contentDescription="تنظیمات") }
+                            }
+                        },
                         colors=TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor=MaterialTheme.colorScheme.background)
                     )
                 },
                 bottomBar={
                     NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=3.dp){
-                        listOf("خانه" to Icons.Default.Home,"هفته جاری" to Icons.Default.Today,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings)
+                        listOf("خانه" to Icons.Default.Home,"هفته جاری" to Icons.Default.Today,"یادداشت‌ها" to Icons.Default.NoteAlt,"تقویم" to Icons.Default.DateRange,"تنظیمات" to Icons.Default.Settings,"پیام‌ها" to Icons.Default.MailOutline)
                             .forEachIndexed{i,(label,icon)->
-                                NavigationBarItem(selected=screen==i,onClick={screen=i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
+                                NavigationBarItem(selected=screen==(if(i==5) 9 else i),onClick={screen=if(i==5) 9 else i},icon={Icon(icon,null)},label={Text(label,fontFamily=Fa,fontSize=11.sp)},alwaysShowLabel=true)
                             }
                     }
                 }
@@ -725,12 +917,47 @@ fun PregnancyApp(){
                         themeMode=themeMode,
                         onTheme={themeDialog=true},
                         pad=pad,
-                        onAbout={screen=7}
+                        onAbout={screen=7},
+                        onReport={screen=13},
+                        onUpdates={screen=14}
                     )
                     5->ExamsModern(records=exams,pregnancy=p,onAdd={examEditor=null;examEditorOpen=true},onEdit={examEditor=it;examEditorOpen=true},onDelete={record->exams=exams.filterNot{it.id==record.id};saveExams();examEditorOpen=false},onOpen={examDetail=it},pad=pad)
                     6->WeeksModern(age.first,pad){selectedWeek=it}
                     7->AboutModern(pad)
                     8->BabyNamesScreen(savedLists=babyNameLists,onSave={saveBabyNames(it)},pad=pad)
+                    13->IssueReportScreen(uid=FirebaseAuth.getInstance().currentUser?.uid,onBack={screen=4},onSignIn={signInFirebaseWithGoogle()})
+                    14->UpdateCenterScreen(onBack={screen=4})
+                    9->MessagingCenterScreen(
+                        uid=FirebaseAuth.getInstance().currentUser?.uid,
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        onProfile={screen=10},
+                        onSignIn={signInFirebaseWithGoogle()},
+                        onNotifications={screen=11},
+                        onFriends={screen=15},
+                        contentPadding=pad
+                    )
+                    10->NonoProfileScreen(uid=FirebaseAuth.getInstance().currentUser?.uid,onBack={screen=9},onSignIn={signInFirebaseWithGoogle()},contentPadding=pad)
+                    11->NonoNotificationsScreen(
+                        uid=FirebaseAuth.getInstance().currentUser?.uid,
+                        onBack={screen=9},
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        contentPadding=pad
+                    )
+                    15->NonoFriendsScreen(
+                        uid=FirebaseAuth.getInstance().currentUser?.uid,
+                        onBack={screen=9},
+                        onSignIn={signInFirebaseWithGoogle()},
+                        onOpenChat={conversation,profile->activeConversation=conversation;activeOtherProfile=profile;screen=12},
+                        contentPadding=pad
+                    )
+                    12->{
+                        val conversation=activeConversation
+                        val other=activeOtherProfile
+                        val currentUid=FirebaseAuth.getInstance().currentUser?.uid
+                        if(conversation!=null && other!=null && currentUid!=null)
+                            NonoChatThreadScreen(currentUid,conversation,other,onBack={screen=9},contentPadding=pad)
+                        else MessagingCenterScreen(uid=currentUid,onOpenChat={chat,profile->activeConversation=chat;activeOtherProfile=profile},onProfile={screen=10},onSignIn={signInFirebaseWithGoogle()},onNotifications={screen=11},onFriends={screen=15},contentPadding=pad)
+                    }
                 }
             }
         }
@@ -1105,97 +1332,6 @@ fun ModernProgressChart(week:Int){
                     Text("۱",fontFamily=Fa,fontSize=11.sp)
                     Text("۲۰",fontFamily=Fa,fontSize=11.sp)
                     Text("۴۰",fontFamily=Fa,fontSize=11.sp)
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun CalendarModern(
-    due:LocalDate, month:LocalDate, onMonth:(LocalDate)->Unit,
-    selected:LocalDate, onSelected:(LocalDate)->Unit, onChangeDue:()->Unit,
-    pad:PaddingValues
-){
-    val today=LocalDate.now()
-    val displayed=jalaliParts(month)
-    val first=jalaliToGregorian(displayed.year,displayed.month,1)
-    val offset=((first.dayOfWeek.value+1)%7)
-    val maxDay=if(displayed.month<=6)31 else if(displayed.month<=11)30 else if(isJalaliLeap(displayed.year))30 else 29
-    val pregnancy=Pregnancy(due)
-    val selectedAge=pregnancy.age(selected)
-    val inPregnancy=selected>=pregnancy.lmp && selected<=due
-    LazyColumn(Modifier.fillMaxSize().padding(pad).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=8.dp,bottom=28.dp)){
-        item{
-            Text("تقویم بارداری",fontFamily=Fa,fontSize=25.sp,fontWeight=FontWeight.Bold)
-            Text("تقویم کاملاً شمسی؛ تاریخ‌ها، ماه‌ها و انتخاب روز بدون نمایش تاریخ میلادی.",fontFamily=Fa,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=4.dp))
-        }
-        item{
-            Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=Blush)){
-                Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){
-                    Surface(shape=RoundedCornerShape(14.dp),color=Color.White,modifier=Modifier.size(48.dp)){Box(contentAlignment=Alignment.Center){Icon(Icons.Default.ChildFriendly,null,tint=RoseDark)}}
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)){
-                        Text("موعد تقریبی زایمان",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
-                        Text(jalali(due),fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=17.sp,color=RoseDark)
-                    }
-                    TextButton(onClick=onChangeDue){Text("تغییر",fontFamily=Fa)}
-                }
-            }
-        }
-        item{
-            Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
-                Column(Modifier.padding(14.dp)){
-                    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween,modifier=Modifier.fillMaxWidth()){
-                        IconButton(onClick={val p=jalaliPreviousMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronRight,null)}
-                        Column(horizontalAlignment=Alignment.CenterHorizontally){
-                            Text(months[displayed.month-1],fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=18.sp)
-                            Text(fa(displayed.year),fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(onClick={val p=jalaliNextMonth(displayed);onMonth(jalaliToGregorian(p.year,p.month,1))}){Icon(Icons.Default.ChevronLeft,null)}
-                    }
-                    Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=6.dp)){
-                        listOf("ش","ی","د","س","چ","پ","ج").forEach{Box(Modifier.weight(1f),contentAlignment=Alignment.Center){Text(it,fontFamily=Fa,fontSize=11.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
-                    }
-                    val cells=List(offset){null}+List(maxDay){it+1}
-                    cells.chunked(7).forEach{weekDays->
-                        Row(Modifier.fillMaxWidth()){
-                            weekDays.forEach{day->
-                                Box(Modifier.weight(1f).height(58.dp).padding(2.dp),contentAlignment=Alignment.Center){
-                                    if(day!=null){
-                                        val date=jalaliToGregorian(displayed.year,displayed.month,day)
-                                        val isSelected=date==selected
-                                        val isToday=date==today
-                                        val isDue=date==due
-                                        val active=date>=pregnancy.lmp && date<=due
-                                        Surface(Modifier.fillMaxSize().clickable{onSelected(date)},shape=RoundedCornerShape(12.dp),color=when{isDue->Rose;isSelected->Blush;active->MaterialTheme.colorScheme.surfaceVariant;else->Color.Transparent}){
-                                            Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
-                                                Text(fa(day),fontFamily=Fa,fontSize=15.sp,fontWeight=if(isToday||isSelected||isDue)FontWeight.Bold else FontWeight.Normal,color=if(isDue)Color.White else MaterialTheme.colorScheme.onSurface)
-                                                if(isToday) Text("امروز",fontFamily=Fa,fontSize=7.sp,color=if(isDue)Color.White else RoseDark)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            repeat(7-weekDays.size){Box(Modifier.weight(1f).height(58.dp))}
-                        }
-                    }
-                }
-            }
-        }
-        item{
-            Card(shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
-                Column(Modifier.padding(17.dp)){
-                    Text("تاریخ انتخاب‌شده",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=15.sp)
-                    Text(jalali(selected),fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=20.sp,color=RoseDark,modifier=Modifier.padding(top=5.dp))
-                    Spacer(Modifier.height(10.dp))
-                    if(inPregnancy){
-                        Text("هفته ${fa(selectedAge.first)}، روز ${fa(selectedAge.second)} بارداری",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
-                        Text(if(selected==due)"این تاریخ، موعد تقریبی زایمان است." else if(selected<today)"این تاریخ در گذشته است." else "این تاریخ در بازه بارداری قرار دارد.",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=3.dp))
-                    }else{
-                        Text(if(selected<pregnancy.lmp)"این تاریخ پیش از شروع محاسبات بارداری است." else "این تاریخ بعد از موعد تقریبی زایمان است.",fontFamily=Fa,fontSize=13.sp)
-                    }
                 }
             }
         }
@@ -1653,6 +1789,8 @@ fun SettingsModern(
     themeMode:String,
     onTheme:()->Unit,
     onAbout:()->Unit,
+    onReport:()->Unit,
+    onUpdates:()->Unit,
     pad:PaddingValues
 ){
     LazyColumn(
@@ -1673,7 +1811,7 @@ fun SettingsModern(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)){
                             Text("پرونده خانوادگی",fontFamily=Fa,fontWeight=FontWeight.Bold,fontSize=14.sp)
-                            Text(if(userRole=="father") "نقش شما: پدر" else "نقش شما: مادر",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if(userRole=="father") "نقش شما: همراه" else "نقش شما: کاربر اصلی",fontFamily=Fa,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     if(familyInviteCode!=null){
@@ -1739,6 +1877,8 @@ fun SettingsModern(
                 when(themeMode){"dark"->"حالت تاریک";"light"->"حالت روشن";else->"همگام با تنظیمات دستگاه"}
             ){onTheme()}
         }
+        item{SettingTile(Icons.Default.BugReport,"گزارش مشکل یا پیشنهاد","ثبت و پیگیری گزارش‌های ارسال‌شده"){onReport()}}
+        item{SettingTile(Icons.Default.SystemUpdate,"بروزرسانی برنامه","بررسی نسخه جدید و دریافت اعلان انتشار"){onUpdates()}}
         item{
             SettingTile(
                 Icons.Default.Info,

@@ -1,15 +1,198 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
     function isFamilyMember(data) {
       return signedIn() && data.members[request.auth.uid] != null;
     }
+    function validScopes(scopes) {
+      return scopes is list
+        && scopes.size() > 0
+        && scopes.size() <= 8
+        && scopes.toSet().hasOnly([
+          'pregnancy_summary',
+          'exam_records',
+          'ultrasounds',
+          'medications',
+          'symptoms',
+          'private_notes',
+          'appointments',
+          'clinician_notes'
+        ]);
+    }
+
     match /users/{userId}/{document=**} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
+
+    // Minimal public identity: only display name, username and avatar metadata are exposed.
+    match /publicProfiles/{uid} {
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'username', 'photoUrl', 'avatarKey', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 40
+        && request.resource.data.username is string
+        && request.resource.data.username.size() <= 20
+        && request.resource.data.avatarKey is string;
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'username', 'avatarKey', 'updatedAt'
+        ])
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if false;
+    }
+
+    // Username reservation documents make user handles unique.
+    match /usernames/{username} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Friend requests are visible only to their sender and recipient.
+    match /friendRequests/{requestId} {
+      allow get, list: if signedIn()
+        && (resource.data.senderUid == request.auth.uid
+          || resource.data.recipientUid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'senderUid', 'recipientUid', 'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.recipientUid is string
+        && request.resource.data.recipientUid != request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.recipientUid));
+      allow update: if signedIn()
+        && request.resource.data.senderUid == resource.data.senderUid
+        && request.resource.data.recipientUid == resource.data.recipientUid
+        && (
+          (
+            resource.data.recipientUid == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['accepted', 'rejected']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+          ||
+          (
+            resource.data.senderUid == request.auth.uid
+            && resource.data.status in ['pending', 'rejected']
+            && request.resource.data.status == 'pending'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'createdAt', 'updatedAt'])
+          )
+        );
+      allow delete: if false;
+    }
+
+    // A friendship is created only in the same atomic batch that accepts its request.
+    match /friendships/{friendshipId} {
+      allow get, list: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['members', 'requestId', 'createdBy', 'createdAt'])
+        && request.resource.data.members is list
+        && request.resource.data.members.size() == 2
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.requestId is string
+        && request.resource.data.createdAt is timestamp
+        && existsAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId))
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId)).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId)).data.recipientUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId)).data.senderUid in request.resource.data.members
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId)).data.recipientUid in request.resource.data.members;
+      allow update, delete: if false;
+    }
+
+    // User-submitted issue reports. Users can create and read only their own reports.
+    match /issueReports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'title', 'category', 'description', 'appVersion',
+          'versionCode', 'androidVersion', 'device', 'status', 'createdAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 4
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.category in ['bug', 'suggestion', 'other']
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 10
+        && request.resource.data.description.size() <= 3000
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() <= 30
+        && request.resource.data.versionCode is int
+        && request.resource.data.androidVersion is string
+        && request.resource.data.androidVersion.size() <= 30
+        && request.resource.data.device is string
+        && request.resource.data.device.size() <= 120
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt is timestamp;
+      allow get, list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Private one-to-one conversations. Both participants can read the thread.
+    match /conversations/{conversationId} {
+      allow get, list: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'members', 'lastMessage', 'lastSenderId', 'unreadBy', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.members is list
+        && request.resource.data.members.size() == 2
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.members[0] != request.resource.data.members[1]
+        && request.resource.data.lastMessage == ''
+        && request.resource.data.lastSenderId == '';
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.members
+        && request.resource.data.members == resource.data.members
+        && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'lastMessage', 'lastSenderId', 'updatedAt', 'unreadBy'
+            ])
+            && request.resource.data.lastSenderId == request.auth.uid
+            && request.resource.data.lastMessage is string
+            && request.resource.data.lastMessage.size() <= 180
+          )
+          ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadBy', 'readAt'])
+            && request.resource.data.unreadBy[request.auth.uid] == 0
+          )
+        );
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members;
+        allow create: if signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members
+          && request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt'])
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 4000;
+        allow update, delete: if false;
+      }
+    }
+
     match /families/{familyId} {
       allow get: if isFamilyMember(resource.data)
         || (signedIn() && resource.data.inviteCode == familyId);
@@ -33,6 +216,83 @@ service cloud.firestore {
       );
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }
+
+    // A professional profile is self-managed but can never self-verify.
+    match /professionals/{professionalUid} {
+      allow get: if signedIn() && request.auth.uid == professionalUid;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid == professionalUid
+        && request.resource.data.keys().hasOnly([
+          'uid', 'role', 'displayName', 'licenseNumber', 'reviewStatus',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role in ['midwife', 'obgyn']
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.reviewStatus == 'pending';
+      allow update: if signedIn()
+        && request.auth.uid == professionalUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'licenseNumber', 'updatedAt'
+        ])
+        && request.resource.data.reviewStatus == resource.data.reviewStatus
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if false;
+    }
+
+    // High-entropy invitation code maps to a professional; enumeration is denied.
+    match /professionalInvites/{inviteCode} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['professionalUid', 'role', 'createdAt'])
+        && request.resource.data.professionalUid == request.auth.uid
+        && existsAfter(/databases/$(database)/documents/professionals/$(request.auth.uid))
+        && request.resource.data.role in ['midwife', 'obgyn'];
+      allow update: if signedIn()
+        && resource.data.professionalUid == request.auth.uid
+        && request.resource.data.professionalUid == resource.data.professionalUid
+        && request.resource.data.role == resource.data.role;
+      allow delete: if signedIn() && resource.data.professionalUid == request.auth.uid;
+    }
+
+    // Patient owns consent. Professionals can only read requests addressed to them.
+    match /careRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'patientUid', 'familyId', 'professionalUid', 'professionalRole', 'inviteCode',
+          'scopes', 'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.patientUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && validScopes(request.resource.data.scopes)
+        && request.resource.data.professionalRole in ['midwife', 'obgyn']
+        && exists(/databases/$(database)/documents/families/$(request.resource.data.familyId))
+        && get(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.members[request.auth.uid] in ['mother', 'father']
+        && exists(/databases/$(database)/documents/professionals/$(request.resource.data.professionalUid))
+        && get(/databases/$(database)/documents/professionals/$(request.resource.data.professionalUid)).data.role == request.resource.data.professionalRole
+        && exists(/databases/$(database)/documents/professionalInvites/$(request.resource.data.inviteCode))
+        && get(/databases/$(database)/documents/professionalInvites/$(request.resource.data.inviteCode)).data.professionalUid == request.resource.data.professionalUid;
+      allow get, list: if signedIn()
+        && (resource.data.patientUid == request.auth.uid
+          || resource.data.professionalUid == request.auth.uid);
+      allow update: if signedIn()
+        && resource.data.patientUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'respondedAt'])
+        && request.resource.data.patientUid == resource.data.patientUid
+        && request.resource.data.professionalUid == resource.data.professionalUid
+        && request.resource.data.familyId == resource.data.familyId
+        && request.resource.data.scopes == resource.data.scopes
+        && (
+          (resource.data.status == 'pending' && request.resource.data.status in ['approved', 'rejected'])
+          || (resource.data.status == 'approved' && request.resource.data.status == 'revoked')
+        );
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

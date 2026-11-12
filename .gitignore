@@ -1,0 +1,6 @@
+# Android and Gradle outputs
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
