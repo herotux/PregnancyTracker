@@ -281,6 +281,14 @@ test("private conversations and messages are visible only to their two members",
   const recipientDb = env.authenticatedContext("recipient-uid").firestore();
   await assertSucceeds(getDoc(doc(recipientDb, "conversations/sender-uid_recipient-uid")));
   await assertSucceeds(getDoc(doc(recipientDb, "conversations/sender-uid_recipient-uid/messages/message-1")));
+  await assertSucceeds(getDocs(query(
+    collection(senderDb, "conversations"),
+    where("members", "array-contains", "sender-uid")
+  )));
+  await assertSucceeds(getDocs(query(
+    collection(recipientDb, "conversations"),
+    where("members", "array-contains", "recipient-uid")
+  )));
   const outsiderDb = env.authenticatedContext("outsider-uid").firestore();
   await assertFails(getDoc(doc(outsiderDb, "conversations/sender-uid_recipient-uid")));
   await assertFails(getDoc(doc(outsiderDb, "conversations/sender-uid_recipient-uid/messages/message-1")));
