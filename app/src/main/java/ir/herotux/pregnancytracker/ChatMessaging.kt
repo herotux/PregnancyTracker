@@ -207,18 +207,29 @@ object NonoMessaging {
         require(uid != otherUid) { "نمی‌توانی به خودت پیام بدهی." }
         val members = listOf(uid, otherUid).sorted()
         val id = members.joinToString("_")
-        val ref = db.collection("conversations").document(id)
-        val current = Tasks.await(ref.get())
-        if (!current.exists()) {
-            Tasks.await(ref.set(mapOf(
-                "members" to members,
-                "lastMessage" to "",
-                "lastSenderId" to "",
-                "unreadBy" to mapOf(uid to 0, otherUid to 0),
-                "createdAt" to FieldValue.serverTimestamp(),
-                "updatedAt" to FieldValue.serverTimestamp()
-            )))
+
+        // A direct get() on a not-yet-created conversation is denied by the
+        // membership-only Firestore rule. Query only this user's conversations
+        // instead; the array-contains constraint is compatible with that rule.
+        val existing = Tasks.await(
+            db.collection("conversations")
+                .whereArrayContains("members", uid)
+                .get()
+        ).documents.firstOrNull { document ->
+            val existingMembers = (document.get("members") as? List<*>)?.filterIsInstance<String>().orEmpty()
+            existingMembers.size == 2 && existingMembers.toSet() == members.toSet()
         }
+        if (existing != null) return@withContext existing.id
+
+        val ref = db.collection("conversations").document(id)
+        Tasks.await(ref.set(mapOf(
+            "members" to members,
+            "lastMessage" to "",
+            "lastSenderId" to "",
+            "unreadBy" to mapOf(uid to 0, otherUid to 0),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )))
         id
     }
 
